@@ -30,6 +30,34 @@ Persistent project-state file. Add one checkpoint row per bug fix, fix, or new f
 - APK builds via `./gradlew assembleDebug` (~3.36 MB)
 - Device: APK installed on Galaxy Tab S9 FE; app launches to TitleActivity; Resume/Start New/Settings all respond
 
+**Checkpoint 2 — UI/UX Redesign + Responsiveness + Gaps (v0.7.0 Phase 5, 2026-10-27):**
+- Brand palette + zoomart_icon_512.png on TitleActivity/SettingsActivity
+- Vector drawable icons for all toolbar actions (brush, erase, shapes, blend, layers, image, undo, redo, select, import, png, video, demo, pins, clear, flip, rot90, lazy, pick, zoom±, settings, resume, new)
+- GlassStyle.iconButton + iconChip: icon above label on grouped toolbars
+- Responsive cards: capped dp width, density-aware padding/sizing
+- Gap 1: Calligraphy direction-varying width (stroke angle vs nib angle)
+- Gap 2: Long-press drag layer reorder in LayersPanel
+- Gap 3: FLIP mirrors images horizontally (flipH + render-time scale)
+- All 200/200 tests green; APK installed on Tab S9 FE
+
+**Checkpoint 3 — Dock fixes + canvas rotation + glass UI + haptics (v0.7.0 Phase 6, 2026-10-27):**
+- Docks separated: Edit bottom-left, View/Export top-right (no overlap)
+- Docks now draggable with handles
+- canvasRotationDegrees + two-finger rotate gesture (canvas rotation, touch un-rotation)
+- Translucent glass buttons (BUTTON_FILL 0x80, brand-blue active BUTTON_ACTIVE)
+- Press/selection haptics (selectionTap, pressTap) wired to icon taps
+- Icon press color feedback (Brand.BLUE on press)
+- All 200/200 tests green; APK installed on Note 8
+
+**Checkpoint 4 — Fix dock crash on rotate + toolbar scrolling + dock orientation (v0.7.0 Phase 7, 2026-10-27):**
+- Removed unrotateEvent MotionEvent creation that caused ClassCastException crash on zoom/rotate
+- Wrapped toolbar content in HorizontalScrollView/ScrollView so icons scroll when overflowing
+- Added dock orientation setting (horizontal/vertical) in SettingsActivity
+- Dock orientation persists via AppSettings and applies to dock gravity/layout
+- Dock rest positions clamped to current screen dimensions on rotation (survives rotation)
+- All 200/200 tests green; APK installed on Note 8 (SM_N950U)
+- Device: APK installed on Galaxy Tab S9 FE; app launches to TitleActivity; Resume/Start New/Settings all respond
+
 **Honest gaps (remaining):**
 4. Image display filters are session-volatile UI-state by design (not serialized) — intentional.
 5. docs/USER_GUIDE.md v0.5.0 refresh still in flight — verify against current source.

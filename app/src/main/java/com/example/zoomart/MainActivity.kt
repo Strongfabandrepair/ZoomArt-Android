@@ -29,6 +29,7 @@ import com.example.zoomart.ui.BlendPanel
 import com.example.zoomart.ui.BrushPanel
 import com.example.zoomart.model.BrushPresets
 import com.example.zoomart.ui.ColorPickerDialog
+import com.example.zoomart.ui.ColorWheelView
 import com.example.zoomart.ui.ImagePanel
 import com.example.zoomart.ui.LayersPanel
 import com.example.zoomart.ui.PinsPanel
@@ -529,12 +530,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showColorPicker() {
-        ColorPickerDialog(this, canvasView.viewModel.currentBrush.color) { color ->
-            canvasView.viewModel.currentBrush =
-                canvasView.viewModel.currentBrush.copy(color = color)
-            brushPanel.syncFrom(canvasView.viewModel.currentBrush)
-            updateSwatch()
-        }.show()
+        // v0.7.0: circular color wheel replaces the HSV dialog — live preview,
+        // no OK/Cancel tap required (color applies as you pick).
+        ColorWheelView(this).apply {
+            color = canvasView.viewModel.currentBrush.color
+            onColorChanged { color ->
+                canvasView.viewModel.currentBrush =
+                    canvasView.viewModel.currentBrush.copy(color = color)
+                brushPanel.syncFrom(canvasView.viewModel.currentBrush)
+                updateSwatch()
+            }
+        }.let { wheel ->
+            androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                .setTitle("Color")
+                .setView(wheel)
+                .setPositiveButton("OK") { _, _ -> }
+                .show()
+        }
     }
 
     private fun updateSwatch() {

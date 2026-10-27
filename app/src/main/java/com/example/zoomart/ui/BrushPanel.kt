@@ -1,7 +1,11 @@
 package com.example.zoomart.ui
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -30,6 +34,8 @@ class BrushPanel(
     private lateinit var eraseBar: SeekBar
     private lateinit var lazyToggle: Button
     private lateinit var lazyRadiusBar: SeekBar
+    /** v0.7.0: live preview strip showing the current brush stroke. */
+    private lateinit var previewStrip: PreviewStrip
 
     private var widthWorld = 6f
     private var response = 2f
@@ -74,6 +80,17 @@ class BrushPanel(
             presetsRow.addView(b, lp)
         }
         addView(presetsRow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+
+        // v0.7.0: live preview strip — shows the current brush stroke sample
+        // so the user sees the effect without drawing on the canvas.
+        val previewLabel = TextView(context).apply {
+            text = "Preview"
+            setTextColor(GlassStyle.TEXT_SECONDARY)
+            textSize = 10f
+        }
+        addView(previewLabel, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        previewStrip = PreviewStrip(context)
+        addView(previewStrip, LayoutParams(LayoutParams.MATCH_PARENT, (resources.displayMetrics.density * 34).toInt()))
 
         sizeBar = slider("Size") { widthWorld = 1f + it * 49f / 100f }
         responseBar = slider("Pressure") { response = it / 25f }
@@ -177,9 +194,11 @@ class BrushPanel(
         pressureOpacity = spec.pressureOpacity
         minOpacity = spec.minOpacity
         syncBars()
+        previewStrip.setSpec(widthWorld, response, opacity, color, pressureOpacity, minOpacity)
     }
 
     private fun emit() {
+        previewStrip.setSpec(widthWorld, response, opacity, color, pressureOpacity, minOpacity)
         onBrushChanged(
             BrushSpec(
                 baseWidthWorld = widthWorld,
@@ -191,5 +210,79 @@ class BrushPanel(
                 minOpacity = minOpacity,
             )
         )
+    }
+
+}
+
+/**
+ * v0.7.0: live brush preview — draws a sample stroke using the current
+ * BrushSpec so the user sees size/opacity/pressure before touching canvas.
+ */
+class PreviewStrip(context: Context) : View(context) {
+
+    private val strokePaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    private var spec: BrushSpec = BrushSpec()
+
+    /** Called by BrushPanel.emit() with the latest spec. */
+    fun setSpec(baseWidthWorld: Float, pressureResponse: Float, opacity: Float,
+                color: Int, pressureOpacity: Boolean, minOpacity: Float) {
+        spec = BrushSpec(
+            baseWidthWorld = baseWidthWorld,
+            pressureResponse = pressureResponse,
+            minWidthRatio = 0.15f,
+            color = color,
+            opacity = opacity,
+            pressureOpacity = pressureOpacity,
+            minOpacity = minOpacity,
+        )
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val density = resources.displayMetrics.density
+
+        // Background swatch
+        canvas.drawColor(0xFF2A2E37.toInt())
+
+        // Draw a sample stroke: a gentle S-curve across the strip
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        val amp = h * 0.35f
+        val path = android.graphics.Path()
+        path.moveTo(w * 0.05f, cy)
+        path.cubicTo(
+            w * 0.25f, cy - amp,
+            w * 0.75f, cy + amp,
+            w * 0.95f, cy
+        )
+
+        // Width: screen-relative at 1x (preview is at screen scale)
+        val widthPx = spec.baseWidthWorld * density
+        strokePaint.strokeWidth = widthPx.coerceIn(2f, 40f)
+
+        // Color + opacity
+        val alpha = (spec.opacity * 255).toInt()
+        strokePaint.color = (spec.color and 0xFFFFFF) or (alpha shl 24)
+
+        // Pressure variation: draw with several widths to show response
+        if (spec.pressureResponse > 0f) {
+            // faded lighter stroke = low pressure
+            val lowAlpha = (spec.minOpacity * 255).toInt()
+            strokePaint.alpha = lowAlpha
+            strokePaint.strokeWidth = (widthPx * 0.4f).coerceIn(1f, 20f)
+            canvas.drawPath(path, strokePaint)
+        }
+        // main stroke = full pressure
+        strokePaint.alpha = alpha
+        strokePaint.strokeWidth = widthPx.coerceIn(2f, 40f)
+        canvas.drawPath(path, strokePaint)
     }
 }

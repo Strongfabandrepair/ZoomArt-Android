@@ -79,6 +79,10 @@ class ZoomableCanvasView @JvmOverloads constructor(
 
     enum class Tool { DRAW, EYEDROPPER, ERASE, SELECT, SHAPE, SMUDGE }
 
+    /** v0.7.0: effective tool — erase-as-modifier means DRAW with erase=true acts as ERASE. */
+    val effectiveTool: Tool get() =
+        if (tool == Tool.DRAW && viewModel.currentBrush.erase) Tool.ERASE else tool
+
     val viewModel = DrawingViewModel()
 
     var tool: Tool = Tool.DRAW
@@ -400,7 +404,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
             cancel.recycle()
         }
         scroller.forceFinished(true)
-        gestureTool = if (TouchRouting.forcesErase(toolType)) Tool.ERASE else tool
+        gestureTool = if (TouchRouting.forcesErase(toolType)) Tool.ERASE else effectiveTool
         if (gestureTool != Tool.EYEDROPPER && viewModel.document.activeLayer.locked) {
             // P2.2: locked layers reject new strokes, the eraser and
             // marquee selection; visible content stays untouched.

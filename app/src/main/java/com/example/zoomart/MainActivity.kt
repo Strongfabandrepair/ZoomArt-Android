@@ -100,10 +100,8 @@ class MainActivity : AppCompatActivity() {
         canvasView = ZoomableCanvasView(this)
         brushPanel = BrushPanel(
             this,
-            { brush ->
-                canvasView.viewModel.currentBrush = brush
-                updateSwatch()
-            },
+            // v0.7.0: selecting a preset resets erase (smart switch back to draw).
+            { brush -> canvasView.viewModel.selectBrushPreset(brush); updateSwatch() },
             { radius -> canvasView.viewModel.eraserRadiusWorld = radius },
             // P3.2: lazy stabilizer toggle + rope radius (screen px)
             { on, radius ->
@@ -211,9 +209,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         // ----- groups WITH panels: compact button → extends into full panel -----
-        // Brushes → BrushPanel
+        // Brushes → BrushPanel (compact: Brush chip + Erase toggle chip)
         val brushesShell = groupedToolbar("Brushes", "BRUSHES",
-            compact = listOf(buttonChip("Brush", { togglePanel(brushPanel) })),
+            compact = listOf(
+                buttonChip("Brush", { togglePanel(brushPanel) }),
+                buttonChip("Erase", { toggleEraseOnBrush() }),
+            ),
             extended = brushPanel,
             gravity = Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter)
@@ -492,15 +493,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleErase() {
-        canvasView.tool =
-            if (canvasView.tool == ZoomableCanvasView.Tool.ERASE) ZoomableCanvasView.Tool.DRAW
-            else ZoomableCanvasView.Tool.ERASE
-        toast(
-            if (canvasView.tool == ZoomableCanvasView.Tool.ERASE)
-                "Eraser ON - drag over strokes (size in Brush panel)"
-            else "Back to drawing"
-        )
+    /** v0.7.0: erase-as-modifier — toggle erase on the current brush, not a locked tool mode. */
+    private fun toggleEraseOnBrush() {
+        val vm = canvasView.viewModel
+        vm.eraseOnCurrentBrush = !vm.eraseOnCurrentBrush
+        toast(if (vm.eraseOnCurrentBrush)
+            "Erase ON for current brush - tap any brush preset to return to drawing"
+        else "Back to drawing")
     }
 
     private fun toggleSelect() {

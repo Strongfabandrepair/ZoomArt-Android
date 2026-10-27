@@ -19,6 +19,7 @@ data class BrushSpec(
     val spacingWorld: Float = 0f,    // stamp spacing (0 = continuous outline)
     val pressureOpacity: Boolean = false, // P1.2: pressure drives alpha, not just width
     val minOpacity: Float = DEFAULT_MIN_OPACITY, // alpha floor at zero pressure
+    val erase: Boolean = false,      // v0.7.0: erase-as-modifier — carve instead of draw
 ) {
     /**
      * Maps normalized pressure [0..1] to a stroke width. The result is in the

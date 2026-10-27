@@ -463,6 +463,18 @@ class DrawingViewModel(
     fun undo(): Boolean = document.undo()
     fun redo(): Boolean = document.redo()
 
+    /** v0.7.0: erase-as-modifier — toggle carve mode on the current brush. */
+    var eraseOnCurrentBrush: Boolean
+        get() = currentBrush.erase
+        set(value) {
+            currentBrush = currentBrush.copy(erase = value)
+        }
+
+    /** v0.7.0: select a brush preset and reset erase (smart switch back to draw). */
+    fun selectBrushPreset(spec: BrushSpec) {
+        currentBrush = spec.copy(erase = false)
+    }
+
     fun addBookmark(worldX: Float, worldY: Float, label: String): Bookmark =
         document.addBookmark(worldX, worldY, camera.scale, label, camera.level.id)
 

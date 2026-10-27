@@ -40,6 +40,7 @@ Persistent project-state file. Add one checkpoint row per bug fix, fix, or new f
 |---|---|---|---|---|---|---|
 | 0 | 2026-10-27 | Baseline: full P0–P4 + UI overhaul complete | *(initial commit)* | 200/200 green | Tab S9 FE P1–P4 passed | progress.md created; git repo initialized; pushed to GitHub |
 | 1 | 2026-10-27 | Phase 1: Title page + Settings entry flow | *(phase 1 commit)* | 200/200 green | Tab S9 FE installed + launched | TitleActivity launcher; SettingsActivity persists; MainActivity honors entry mode |
+| 2 | 2026-10-27 | Phase 2: Grouped floating toolbars + extendable panels | *(phase 2 commit)* | 200/200 green | Tab S9 FE installed + launched | 7 grouped toolbars; panels extend/collapse via chevron; all in auto-hide pipeline |
 
 ## How to use this file
 

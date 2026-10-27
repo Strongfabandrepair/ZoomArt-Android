@@ -10,38 +10,36 @@ Persistent project-state file. Add one checkpoint row per bug fix, fix, or new f
 - **What:** Android/Kotlin infinite-canvas vector drawing app (a clone of Infinitefy OU's Endless Zoom Canvas / ZoomArt): endlessly zoomable canvas, pressure-sensitive brushes, layers, bookmark pins, autosave, crash recovery, PNG/MP4 export
 - **Module:** `app/` — Gradle Kotlin DSL, compileSdk 34
 - **Toolchain:** JDK 17 at `C:/Users/silo1/AndroidSDK/jdk-17` (JAVA_HOME); Android SDK at `C:/Users/silo1/AndroidSDK` (platform-34, build-tools 34.0.0); build via `./gradlew` (wrapper); AVD `zoomart`
-- **Verified device:** Galaxy Tab S9 FE (SM-X510, Android 16, S Pen), adb serial `R52X200E6LK`
-- **Repo:** NOT yet under version control (created at checkpoint 0 below)
+- **Verified device:** Galaxy Tab S9 FE (SM-X510, Android 16, S Pen), adb serial `ce081718958624350c7e`
+- **Repo:** Git initialized, pushed to https://github.com/Strongfabandrepair/ZoomArt-Android (branch `main`)
 
-## Current state — checkpoint 0 baseline (2026-10-27)
+**Current state — checkpoint 1 (v0.7.0 Phase 1, 2026-10-27)**
 
-**Architecture (complete):**
-- Nested zoom levels: `ZoomLevel` tree; child origin = zoom focus; 1 child unit = 1/100 parent unit; promote/demote at the 100× threshold with exact screen-point continuity; cross-level log-space camera flights
-- Brush widths screen-relative (stored as level-local units at commit); pencil pressure→opacity; pen draws / fingers pan+zoom routing with palm rejection
-- Layers v2: duplicate/rename/reorder (Up/Dn MVP)/lock/opacity + Normal/Multiply/Screen/Overlay blend via `saveLayer` across all visible levels
-- Tools: 8 parametric shapes (line, rect, rounded rect, ellipse, triangle, polygon, star, arrow), lazy-brush rope stabilizer with overlay + quadratic smoothing + end taper, blend/smudge with 80/20 color carry and soft vector stamps
-- Image v2: own-layer import centered at camera level, Select-tool tap/move/corner-resize, pinch rotate+scale, transparency 0–100, lock, tracing mode (40% + lock + fresh layer), grayscale/contrast display filters (UI-state, not serialized), bitmap-blur note
-- Export: PNG (world bbox up to 4096 px) and MP4 H.264 camera fly-through of pins
-- Crash guard (session snapshot on uncaught exception) + atomic autosave (15 s + on pause) + crash recovery on relaunch
-- UI overhaul (0.6.0): floating draggable glass panels, frosted backdrop blur (API 31+), spring micro-animations, auto-hide while drawing, glass dock, canvas HUD chip, position persistence
+**New (Phase 1 — Title page + Settings):**
+- `TitleActivity` — launcher: glass-styled title card with "Resume Project", "Start New", "Settings"; Resume disabled when no session exists; spring show-in animation
+- `SettingsActivity` — default brush preset picker, auto-hide on/off toggle, autosave interval (off/15s/30s/60s), all persisted via `AppSettings` SharedPreferences
+- `AppSettings` — SharedPreferences helper for brush preset index, auto-hide flag, autosave interval, and session-saved timestamp
+- `MainActivity` — no longer launcher; accepts `zoomart.mode` intent extra ("new"/"resume"); applies default brush preset; clears session on "new"; records session saves for resume eligibility
+- `OverlayLayer.autoHideEnabled` — user can disable auto-hide from Settings
+- `AndroidManifest.xml` — TitleActivity is MAIN/LAUNCHER; MainActivity + SettingsActivity are non-exported
 
-**Verification (this baseline):**
-- Tests: **200/200 green** (`./gradlew testDebugUnitTest`, JVM + Robolectric) — 20 test classes incl. CameraLevelTest, P1SpecTest, P2LayersTest/P2SmokeTest, P3ShapesTest/P3LazyTest/P3SmudgeTest/P3SmokeTest, P4ImageUiTest/P4SmokeTest, AppSmokeTest (real stylus/finger MotionEvent dispatch headlessly), glass-panel tests
-- APK: `app/build/outputs/apk/debug/app-debug.apk` (~3.36 MB), builds via `./gradlew assembleDebug`
-- Device (Galaxy Tab S9 FE): P1, P2, P3, P4 build passes all logged 0 `FATAL EXCEPTION`s; finger pan + fling verified via adb swipes; pressure→opacity pixel-verified; blend modes pixel-verified via exported PNGs + PIL; image display filters pixel-verified; demo tour + cancellations verified; real-S-Pen gestures (image transforms, cross-level eraser) are Robolectric/JVM-verified — adb cannot inject stylus tool types, so S Pen feel remains a hand-test item
+**Architecture (unchanged from baseline):** nested zoom levels, screen-relative brush width, pencil pressure→opacity, pen/finger routing, layers v2, 8 shapes, lazy brush, smudge, image v2, PNG/MP4 export, crash guard + autosave, UI overhaul glass panels.
 
-**Honest gaps (post-program, tracked here):**
-1. Calligraphy: angled nib only; direction-varying width is an open gap
-2. Layer reorder: Up/Dn buttons MVP; long-press drag reorder not implemented
-3. FLIP does not mirror images (pinch rotate/scale used instead)
-4. Image display filters are session-volatile UI-state by design (not serialized)
-5. `docs/USER_GUIDE.md` v0.5.0 refresh was in flight at last save — verify against current source
+**Verification (Phase 1):**
+- Tests: **200/200 green** (all 20 pre-existing test classes untouched)
+- APK builds via `./gradlew assembleDebug` (~3.36 MB)
+- Device: APK installed on Galaxy Tab S9 FE; app launches to TitleActivity; Resume/Start New/Settings all respond
+
+**Honest gaps (unchanged from baseline + new):**
+1-5. (baseline gaps unchanged)
+6. Title/Settings UX is functional but basic — no live preview, no grouped toolbars, no color wheel yet (Phase 2-4)
 
 ## Checkpoint log
 
 | # | Date (US/Eastern) | Scope | Commit | Tests | Device | Notes |
 |---|---|---|---|---|---|---|
 | 0 | 2026-10-27 | Baseline: full P0–P4 + UI overhaul complete | *(initial commit)* | 200/200 green | Tab S9 FE P1–P4 passed | progress.md created; git repo initialized; pushed to GitHub |
+| 1 | 2026-10-27 | Phase 1: Title page + Settings entry flow | *(phase 1 commit)* | 200/200 green | Tab S9 FE installed + launched | TitleActivity launcher; SettingsActivity persists; MainActivity honors entry mode |
 
 ## How to use this file
 

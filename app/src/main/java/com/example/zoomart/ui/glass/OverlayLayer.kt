@@ -73,7 +73,15 @@ class OverlayLayer(context: Context) : FrameLayout(context) {
     /** True while the pipeline has the shells hidden (test hook). */
     val panelsCurrentlyHidden: Boolean get() = autoHide.panelsHidden
 
+    /** Whether auto-hide is active (user can disable it in Settings). */
+    var autoHideEnabled = true
+        set(value) {
+            field = value
+            if (!value) autoHide.resetToIdle()
+        }
+
     private fun applyAutoHidden(hidden: Boolean) {
+        if (!autoHideEnabled) return
         for (s in shells) {
             if (s.isShowing) s.setAutoHidden(hidden)
         }

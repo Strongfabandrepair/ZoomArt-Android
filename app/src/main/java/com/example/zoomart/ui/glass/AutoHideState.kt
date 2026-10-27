@@ -79,6 +79,11 @@ class AutoHideStateMachine(
         }
     }
 
+    /** Reset the machine to IDLE (used when auto-hide is disabled). */
+    fun resetToIdle() {
+        state = State.IDLE
+    }
+
     private fun restore() {
         if (state == State.IDLE) return
         state = State.IDLE

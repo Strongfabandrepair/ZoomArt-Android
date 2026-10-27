@@ -20,12 +20,14 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.example.zoomart.export.MediaSaver
+import java.io.File
 import com.example.zoomart.export.PngExporter
 import com.example.zoomart.export.ZoomVideoExporter
 import com.example.zoomart.model.CrashGuard
 import com.example.zoomart.model.DocumentCodec
 import com.example.zoomart.ui.BlendPanel
 import com.example.zoomart.ui.BrushPanel
+import com.example.zoomart.model.BrushPresets
 import com.example.zoomart.ui.ColorPickerDialog
 import com.example.zoomart.ui.ImagePanel
 import com.example.zoomart.ui.LayersPanel
@@ -37,7 +39,6 @@ import com.example.zoomart.ui.glass.FloatingPanel
 import com.example.zoomart.ui.glass.GlassStyle
 import com.example.zoomart.ui.glass.OverlayLayer
 import com.example.zoomart.ui.glass.Springs
-import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.max
 
@@ -174,6 +175,9 @@ class MainActivity : AppCompatActivity() {
         host("ImagePanel", Gravity.BOTTOM or Gravity.START, imagePanel)
         overlay.setDock(dock, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
 
+        // v0.7.0: honor the persisted auto-hide preference.
+        overlay.autoHideEnabled = AppSettings.getAutoHide(this)
+
         canvasView.onStateChanged = { refreshToolbar() }
         canvasView.onEyedrop = { color ->
             canvasView.viewModel.currentBrush =
@@ -183,6 +187,17 @@ class MainActivity : AppCompatActivity() {
         }
         // U-overhaul: stylus strokes / pinches drive the auto-hide pipeline.
         canvasView.onCanvasActivityChanged = { active -> overlay.onCanvasActivity(active) }
+
+        // v0.7.0: honor the entry mode passed from TitleActivity ("resume" or "new")
+        // and the persisted user settings before loading the canvas state.
+        val entryMode = intent.getStringExtra("zoomart.mode")
+        if (entryMode == "new") {
+            sessionFile.delete()
+            crashFile.delete()
+            toast("New project")
+        }
+        // Apply persisted default brush preset.
+        canvasView.viewModel.currentBrush = BrushPresets.all[AppSettings.getBrushPresetIndex(this)].second
 
         loadSession()
         refreshToolbar()
@@ -544,6 +559,8 @@ class MainActivity : AppCompatActivity() {
             if (!tmp.renameTo(sessionFile)) {
                 sessionFile.writeText(payload)
             }
+            // v0.7.0: record that a session exists so the title page can offer Resume.
+            AppSettings.noteSessionSaved(this)
             if (!quiet) toast("Session saved")
         } catch (t: Throwable) {
             if (!quiet) toast("Save failed: " + t.message)

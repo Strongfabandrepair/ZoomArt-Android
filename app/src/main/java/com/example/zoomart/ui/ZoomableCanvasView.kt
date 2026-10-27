@@ -823,15 +823,18 @@ class ZoomableCanvasView @JvmOverloads constructor(
     private fun pressure01(raw: Float): Float = raw.coerceIn(0f, 1f)
 
     override fun onDraw(canvas: Canvas) {
-        // v0.7.0: apply canvas rotation around center
+        // Draw scene + overlays WITH canvas rotation applied
         canvas.save()
         canvas.rotate(canvasRotationDegrees, width / 2f, height / 2f)
         canvas.drawColor(Color.WHITE)
         drawScene(canvas)
         drawSelectionOverlay(canvas)
         drawLazyOverlay(canvas)
-        drawZoomReadout(canvas)
         canvas.restore()
+
+        // Zoom readout is drawn in SCREEN space (NOT rotated with canvas),
+        // so it stays upright and readable at any canvas rotation.
+        drawZoomReadout(canvas)
     }
 
     /**

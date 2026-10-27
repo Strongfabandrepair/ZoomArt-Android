@@ -230,7 +230,7 @@ class GlassPanelTest {
         controller.setup()
         val activity = controller.get()
 
-        // the dock + 6 panel shells live in the overlay; the canvas is a
+        // the dock + panel shells live in the overlay; the canvas is a
         // sibling BELOW it (gesture isolation by construction)
         val overlay = activity.overlay
         assertEquals(7, overlay.childCount)
@@ -253,7 +253,7 @@ class GlassPanelTest {
                 assertEquals("panels start hidden", View.GONE, fp.visibility)
             }
         }
-        assertEquals("two docks (Edit + View/Export)", 2, docks)
+        assertEquals("one dock", 1, docks)
 
         // Regression (found on-device): a MATCH_PARENT fill child inside the
         // WRAP_CONTENT shell used to blow the shell up to the whole screen.
@@ -267,13 +267,15 @@ class GlassPanelTest {
 
         // And a PANEL shell measured with a screen-sized AT_MOST spec must
         // wrap its content, not expand to the full available space.
-        val brushShell = overlay.getChildAt(0) as FloatingPanel
+        val panelShell = (0 until overlay.childCount)
+            .map { overlay.getChildAt(it) as FloatingPanel }
+            .first { it.kind != FloatingPanel.Kind.DOCK }
         val atMost = View.MeasureSpec.makeMeasureSpec(screenH * 3, View.MeasureSpec.AT_MOST)
-        brushShell.measure(atMost, atMost)
-        assertTrue("panel measured height ${brushShell.measuredHeight} must stay well under the screen",
-            brushShell.measuredHeight < screenH * 3 / 4)
-        assertTrue("panel measured width ${brushShell.measuredWidth} must stay under the screen",
-            brushShell.measuredWidth <= screenH * 3)
+        panelShell.measure(atMost, atMost)
+        assertTrue("panel measured height ${panelShell.measuredHeight} must stay well under the screen",
+            panelShell.measuredHeight < screenH * 3 / 4)
+        assertTrue("panel measured width ${panelShell.measuredWidth} must stay under the screen",
+            panelShell.measuredWidth <= screenH * 3)
         controller.destroy()
     }
 }

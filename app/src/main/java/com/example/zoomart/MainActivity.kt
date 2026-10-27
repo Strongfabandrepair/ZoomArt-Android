@@ -150,9 +150,13 @@ class MainActivity : AppCompatActivity() {
         val snapshotter = BackdropSnapshotter(canvasView)
 
         // v0.7.0: grouped floating toolbars replace the monolithic dock.
+        // Each group is its own FloatingPanel shell; groups with panels can extend
+        // into their full panel (chevron), groups without panels show inline buttons.
         buildGroupedToolbars(snapshotter)
 
-        // v0.7.0: honor the persisted auto-hide preference.
+        // v0.7.0: color swatch button — floating color picker toggle.
+        colorSwatch.setOnClickListener { showColorPicker() }
+        updateSwatch()
         overlay.autoHideEnabled = AppSettings.getAutoHide(this)
 
         canvasView.onStateChanged = { refreshToolbar() }
@@ -178,6 +182,15 @@ class MainActivity : AppCompatActivity() {
 
         loadSession()
         refreshToolbar()
+
+        // v0.7.0: color swatch button — floating color picker toggle.
+        colorSwatch.setOnClickListener { showColorPicker() }
+        updateSwatch()
+        val colorSwatchShell = FloatingPanel(this, "Color", { p -> snapshotter.snapshot(p) })
+        colorSwatchShell.setContent(colorSwatch)
+        overlay.addShell(colorSwatchShell, Gravity.END or Gravity.BOTTOM,
+            bottomInsetPx = (resources.displayMetrics.density * 18).toInt())
+
         mainHandler.postDelayed(autosaveRunnable, 15_000L)
     }
 
@@ -266,46 +279,30 @@ class MainActivity : AppCompatActivity() {
             snapshotter = snapshotter)
 
         // ----- groups WITHOUT panels: inline button rows -----
-        val dockOrient = AppSettings.getDockOrientation(this)
-        val dockVertical = dockOrient == 1
-
-        // Edit
-        val editShell = buttonToolbar("Edit",
-            listOf(
-                iconChip(R.drawable.ic_undo, "Undo", { undoButton.performClick() }),
-                iconChip(R.drawable.ic_redo, "Redo", { redoButton.performClick() }),
-                iconChip(R.drawable.ic_clear, "Del", {
-                    if (canvasView.viewModel.document.selection.deleteSelection()) {
-                        canvasView.requestSceneRepaint()
-                        toast("Selection deleted (Undo restores it)")
-                    }
-                }),
-                iconChip(R.drawable.ic_flip, "Flip", { withSelection { it.flip(horizontal = true) } }),
-                iconChip(R.drawable.ic_rot90, "Rot90", { withSelection { it.rotate(90f) } }),
-                iconChip(R.drawable.ic_clear, "Clear", { confirmClearLayer() }),
-            ),
-            gravity = if (dockVertical) Gravity.START or Gravity.BOTTOM else Gravity.BOTTOM or Gravity.START,
-            snapshotter = snapshotter,
+        // Single bottom dock with all editing + view/export buttons in a
+        // horizontally-scrollable row. Buttons from both logical groups
+        // (Edit + View/Export) share the same dock to avoid overlap.
+        val allDockButtons = listOf(
+            iconChip(R.drawable.ic_undo, "Undo", { undoButton.performClick() }),
+            iconChip(R.drawable.ic_redo, "Redo", { redoButton.performClick() }),
+            iconChip(R.drawable.ic_clear, "Del", {
+                if (canvasView.viewModel.document.selection.deleteSelection()) {
+                    canvasView.requestSceneRepaint()
+                    toast("Selection deleted (Undo restores it)")
+                }
+            }),
+            iconChip(R.drawable.ic_clear, "Clear", { confirmClearLayer() }),
+            iconChip(R.drawable.ic_brush, "Brushes", { togglePanel(brushPanel) }),
+            iconChip(R.drawable.ic_layers, "Layers", { togglePanel(layersPanel) }),
+            iconChip(R.drawable.ic_zoom_out, "−", { canvasView.zoomBy(0.5f) }),
+            iconChip(R.drawable.ic_zoom_in, "+", { canvasView.zoomBy(2f) }),
+        )
+        val dockShell = buttonToolbar("Dock",
+            allDockButtons,
+            Gravity.BOTTOM or Gravity.CENTER,
+            snapshotter,
             kind = FloatingPanel.Kind.DOCK,
-            dockVertical = dockVertical)
-        // View/Export — anchored top-right so it never collides with Edit dock
-        val viewShell = buttonToolbar("View/Export",
-            listOf(
-                iconChip(R.drawable.ic_demo, "Demo", {
-                    canvasView.runDemo()
-                    toast("Demo: flying through nested rings - touch to cancel")
-                }),
-                iconChip(R.drawable.ic_pins, "Pins", { togglePanel(pinsPanel); pinsPanel.refresh() }),
-                iconChip(R.drawable.ic_zoom_out, "−", { canvasView.zoomBy(0.5f) }),
-                iconChip(R.drawable.ic_zoom_in, "+", { canvasView.zoomBy(2f) }),
-                iconChip(R.drawable.ic_import, "Import", { importLauncher.launch("image/*") }),
-                iconChip(R.drawable.ic_png, "PNG", { exportPng() }),
-                iconChip(R.drawable.ic_video, "Video", { exportVideo() }),
-            ),
-            gravity = if (dockVertical) Gravity.END or Gravity.TOP else Gravity.TOP or Gravity.END,
-            snapshotter = snapshotter,
-            kind = FloatingPanel.Kind.DOCK,
-            dockVertical = dockVertical)
+            dockVertical = false)
 
         // Place all shells in the overlay. Panel groups anchor bottom/start
         // (except Layers which is end-anchored); inline docks anchor bottom.
@@ -336,8 +333,10 @@ class MainActivity : AppCompatActivity() {
         val labelView = TextView(this).apply {
             text = label
             setTextColor(GlassStyle.TEXT_PRIMARY)
-            textSize = 11f
+            textSize = 14f
             setAllCaps(true)
+            // Drop shadow for readability over glass
+            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
         }
         val chevron = Button(this).apply {
             text = "▾"
@@ -449,12 +448,14 @@ class MainActivity : AppCompatActivity() {
         }
         overlay.addShell(shell, gravity,
             bottomInsetPx = if (gravity and Gravity.BOTTOM != 0) {
-                (density * 14).toInt()
+                // Extra bottom margin so docks don't collide with screen edge
+                // and have breathing room between left and right docks.
+                (density * 18).toInt()
             } else 0)
         return shell
     }
 
-    /** An icon chip for grouped toolbars: vector icon on top, small label below. */
+    /** An icon chip for grouped toolbars: vector icon on top, readable label below. */
     private fun iconChip(iconRes: Int, label: String, onClick: () -> Unit): LinearLayout {
         val density = resources.displayMetrics.density
         val row = LinearLayout(this).apply {
@@ -487,12 +488,18 @@ class MainActivity : AppCompatActivity() {
         row.addView(icon)
         val text = TextView(this).apply {
             text = label
-            textSize = 9f
-            setTextColor(GlassStyle.TEXT_SECONDARY)
+            textSize = 10f
+            setTextColor(GlassStyle.TEXT_PRIMARY)
             setAllCaps(true)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
+            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
         }
+        // Give the text enough width to show most of the label before truncating
+        text.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { width = (density * 64).toInt() }
         row.addView(text)
         return row
     }

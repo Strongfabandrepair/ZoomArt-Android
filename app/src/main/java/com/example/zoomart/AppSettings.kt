@@ -51,7 +51,7 @@ object AppSettings {
 
     // ----- dock orientation -----
     private const val KEY_DOCK_ORIENTATION = "dock_orientation" // 0=horizontal, 1=vertical
-    private const val DEFAULT_DOCK_ORIENTATION = 0
+    private const val DEFAULT_DOCK_ORIENTATION = 1  // default to vertical (narrow columns at sides)
 
     fun getDockOrientation(context: Context): Int =
         prefs(context).getInt(KEY_DOCK_ORIENTATION, DEFAULT_DOCK_ORIENTATION)

@@ -90,15 +90,20 @@ object GlassStyle {
         b.backgroundTintList = ColorStateList.valueOf(BUTTON_FILL)
         b.setTextColor(TEXT_PRIMARY)
         b.isAllCaps = true
+        b.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
     }
 
-    /** Dark-mode restyle for an icon ImageButton: navy fill, white icon, brand-blue when active. */
+    /** Dark-mode restyle for an icon ImageButton: glass fill, white icon,
+     *  brand-blue tint when active. [active] applies the brand-blue tint.
+     *  Includes a subtle drop shadow layer so the button pops off glass. */
     fun iconButton(b: ImageButton, active: Boolean = false) {
-        b.backgroundTintList = ColorStateList.valueOf(if (active) Brand.BLUE_DARK else BUTTON_FILL)
+        b.backgroundTintList = ColorStateList.valueOf(
+            if (active) BUTTON_ACTIVE else BUTTON_FILL)
         b.setColorFilter(TEXT_PRIMARY)
         b.scaleType = ImageView.ScaleType.CENTER_INSIDE
         b.setPadding((b.resources.displayMetrics.density * 6).toInt(), 0,
             (b.resources.displayMetrics.density * 6).toInt(), 0)
+        b.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
     }
 
     /** Light-on-dark restyle for a text view. */

@@ -18,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.zoomart.model.BrushPresets
+import com.example.zoomart.ui.glass.Brand
 import com.example.zoomart.ui.glass.GlassStyle
 import com.example.zoomart.ui.glass.Springs
 
@@ -49,33 +50,36 @@ class SettingsActivity : AppCompatActivity() {
         brushIndex = AppSettings.getBrushPresetIndex(this)
         autosaveMs = AppSettings.getAutosaveMs(this)
 
+        val density = resources.displayMetrics.density
+        val screenW = resources.displayMetrics.widthPixels
+
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+            setBackgroundColor(Brand.BACKGROUND)
         }
 
+        // Responsive branded card.
+        val cardW = minOf((screenW * 0.88f).toInt(), (density * 560).toInt())
         val card = FrameLayout(this).apply {
-            val p = resources.displayMetrics.density
-            val pad = (p * 20).toInt()
+            val pad = (density * 24).toInt()
             setPadding(pad, pad, pad, pad)
-            background = GlassStyle.panelBackground(resources.displayMetrics.density)
+            background = GlassStyle.panelBackground(density)
             foreground = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = GlassStyle.CORNER_DP * p
-                setStroke(maxOf(1, p.toInt()), GlassStyle.BORDER)
+                cornerRadius = GlassStyle.CORNER_DP * density
+                setStroke(maxOf(1, density.toInt()), GlassStyle.BORDER)
             }
-            elevation = GlassStyle.ELEVATION_DP * p
+            elevation = GlassStyle.ELEVATION_DP * density
             clipToOutline = true
             outlineProvider = object : android.view.ViewOutlineProvider() {
                 override fun getOutline(view: View, outline: android.graphics.Outline) {
-                    outline.setRoundRect(0, 0, width, height, GlassStyle.CORNER_DP * p)
+                    outline.setRoundRect(0, 0, width, height, GlassStyle.CORNER_DP * density)
                 }
             }
-            val lp = FrameLayout.LayoutParams(
-                (resources.displayMetrics.widthPixels * 0.88f).toInt(),
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = Gravity.CENTER }
+            val lp = FrameLayout.LayoutParams(cardW, FrameLayout.LayoutParams.WRAP_CONTENT)
+            lp.gravity = Gravity.CENTER
             layoutParams = lp
         }
 
@@ -87,10 +91,10 @@ class SettingsActivity : AppCompatActivity() {
         val title = TextView(this).apply {
             text = "Settings"
             textSize = 28f
-            setTextColor(GlassStyle.TEXT_PRIMARY)
+            setTextColor(Brand.WHITE)
             typeface = android.graphics.Typeface.create(
                 android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
-            setPadding(0, 0, 0, (resources.displayMetrics.density * 24).toInt())
+            setPadding(0, 0, 0, (density * 24).toInt())
         }
         col.addView(title)
 

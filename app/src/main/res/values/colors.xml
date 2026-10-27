@@ -1,3 +1,16 @@
 <resources>
+    <!-- Brand palette derived from brand/zoomart_icon_512.png -->
+    <color name="brand_background">#1A1C24</color>      <!-- dark navy canvas -->
+    <color name="brand_blue">#2E66F6</color>            <!-- inner-ring blue -->
+    <color name="brand_blue_dark">#1E4FB8</color>        <!-- pressed/active blue -->
+    <color name="brand_white">#FFFFFF</color>            <!-- outer ring / text -->
+    <color name="brand_navy">#16181D</color>             <!-- glass panel base -->
+    <color name="brand_scrim">#B816181D</color>          <!-- 72% opaque glass scrim -->
+
+    <!-- UI text (glass dark-mode contrast) -->
+    <color name="text_primary">#E8EAEE</color>
+    <color name="text_secondary">#9AA3AF</color>
+
+    <!-- Legacy -->
     <color name="ic_launcher_background">#1B1E27</color>
 </resources>

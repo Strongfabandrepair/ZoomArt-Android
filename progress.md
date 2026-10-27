@@ -30,9 +30,11 @@ Persistent project-state file. Add one checkpoint row per bug fix, fix, or new f
 - APK builds via `./gradlew assembleDebug` (~3.36 MB)
 - Device: APK installed on Galaxy Tab S9 FE; app launches to TitleActivity; Resume/Start New/Settings all respond
 
-**Honest gaps (unchanged from baseline + new):**
-1-5. (baseline gaps unchanged)
-6. Title/Settings UX is functional but basic — no live preview, no grouped toolbars, no color wheel yet (Phase 2-4)
+**Honest gaps (remaining):**
+4. Image display filters are session-volatile UI-state by design (not serialized) — intentional.
+5. docs/USER_GUIDE.md v0.5.0 refresh still in flight — verify against current source.
+
+**Resolved in Phase 5:** calligraphy direction-varying width; long-press drag layer reorder; FLIP mirrors images; title page branding; vector icons on toolbars; responsive card sizing.
 
 ## Checkpoint log
 
@@ -42,6 +44,8 @@ Persistent project-state file. Add one checkpoint row per bug fix, fix, or new f
 | 1 | 2026-10-27 | Phase 1: Title page + Settings entry flow | *(phase 1 commit)* | 200/200 green | Tab S9 FE installed + launched | TitleActivity launcher; SettingsActivity persists; MainActivity honors entry mode |
 | 2 | 2026-10-27 | Phase 2: Grouped floating toolbars + extendable panels | *(phase 2 commit)* | 200/200 green | Tab S9 FE installed + launched | 7 grouped toolbars; panels extend/collapse via chevron; all in auto-hide pipeline |
 | 3 | 2026-10-27 | Phase 3: Erase-as-modifier + smart brush switching | *(phase 3 commit)* | 200/200 green | Tab S9 FE installed + launched | Erase toggles on current brush; tapping any brush preset returns to draw |
+| 4 | 2026-10-27 | Phase 4: Live previews + color wheel | *(phase 4 commit)* | 200/200 green | Tab S9 FE installed + launched | BrushPanel live preview strip; ColorWheelView replaces HSV dialog |
+| 5 | 2026-10-27 | Phase 5: Responsiveness + branding + icons + gap fixes | *(phase 5 commit)* | 200/200 green | Note 8 (SM_N950U) installed + launched | Brand icon + colors on title page; vector icons on all toolbars; responsive cards; FLIP mirrors images; calligraphy direction-varying width; long-press drag layer reorder |
 
 ## How to use this file
 

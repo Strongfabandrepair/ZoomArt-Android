@@ -1,7 +1,10 @@
 package com.example.zoomart.ui
 
+import android.content.ClipData
 import android.content.Context
+import android.view.DragEvent
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -15,6 +18,7 @@ import com.example.zoomart.model.LayerBlend
 import com.example.zoomart.model.LayerData
 import com.example.zoomart.ui.glass.GlassStyle
 import com.example.zoomart.ui.glass.Springs
+import kotlin.math.abs
 
 /**
  * Layers panel v2 (P2.4). Per row: active radio, tappable name (rename
@@ -91,6 +95,25 @@ class LayersPanel(
         addView(header, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         addView(listContainer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+
+        // P5 gap: long-press drag reorder for layers.
+        listContainer.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DROP -> {
+                    val fromIndex = (event.localState as? Int) ?: return@setOnDragListener false
+                    val toIndex = layerIndexAtY(event.y)
+                    if (fromIndex != toIndex && toIndex >= 0) {
+                        doc().moveLayer(fromIndex, toIndex)
+                        refresh()
+                        view.requestSceneRepaint()
+                        onChanged()
+                    }
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> true
+                else -> true
+            }
+        }
 
         val addButton = Button(context).apply {
             text = "+ Add layer"
@@ -186,6 +209,14 @@ class LayersPanel(
                     onChanged()
                 }
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
+
+            // P5 gap: long-press on a row starts a drag reorder.
+            row.setOnLongClickListener {
+                row.tag = index
+                val clip = ClipData("layer", arrayOf("text/plain"), ClipData.Item(""))
+                row.startDragAndDrop(clip, View.DragShadowBuilder(row), row, 0)
+                true
+            }
 
             row.addView(TextView(context).apply {
                 text = (if (layer.locked) "\uD83D\uDD12 " else "") + layer.name +
@@ -283,5 +314,24 @@ class LayersPanel(
             }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
             listContainer.addView(opacityRow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         }
+    }
+
+    /** P5 gap: given a Y coordinate in listContainer space, return the index
+     *  of the layer row closest to it (rows are at even child indices; opacity
+     *  rows are at odd indices). */
+    private fun layerIndexAtY(y: Float): Int {
+        val count = listContainer.childCount
+        var bestLayer = -1
+        var bestDist = Float.MAX_VALUE
+        for (i in 0 until count step 2) {
+            val child = listContainer.getChildAt(i)
+            val center = (child.top + child.bottom) / 2f
+            val dist = abs(y - center)
+            if (dist < bestDist) {
+                bestDist = dist
+                bestLayer = i / 2
+            }
+        }
+        return bestLayer.coerceIn(0, listContainer.childCount / 2 - 1)
     }
 }

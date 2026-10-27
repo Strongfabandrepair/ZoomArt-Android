@@ -14,6 +14,8 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -184,6 +186,9 @@ class MainActivity : AppCompatActivity() {
 
         undoButton = Button(this).apply {
             text = "Undo"
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                resources.getDrawable(R.drawable.ic_undo), null, null, null)
+            setCompoundDrawablePadding((resources.displayMetrics.density * 4).toInt())
             GlassStyle.button(this)
             Springs.attachPressFeedback(this)
             setOnClickListener {
@@ -194,6 +199,9 @@ class MainActivity : AppCompatActivity() {
         }
         redoButton = Button(this).apply {
             text = "Redo"
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                resources.getDrawable(R.drawable.ic_redo), null, null, null)
+            setCompoundDrawablePadding((resources.displayMetrics.density * 4).toInt())
             GlassStyle.button(this)
             Springs.attachPressFeedback(this)
             setOnClickListener {
@@ -203,7 +211,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
         lazyButton = Button(this).apply {
-            text = "Lazy ✓"
+            text = "Lazy"
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                resources.getDrawable(R.drawable.ic_lazy), null, null, null)
+            setCompoundDrawablePadding((resources.displayMetrics.density * 4).toInt())
             GlassStyle.button(this)
             Springs.attachPressFeedback(this)
             setOnClickListener { toggleLazy() }
@@ -213,33 +224,33 @@ class MainActivity : AppCompatActivity() {
         // Brushes → BrushPanel (compact: Brush chip + Erase toggle chip)
         val brushesShell = groupedToolbar("Brushes", "BRUSHES",
             compact = listOf(
-                buttonChip("Brush", { togglePanel(brushPanel) }),
-                buttonChip("Erase", { toggleEraseOnBrush() }),
+                iconChip(R.drawable.ic_brush, "Brush", { togglePanel(brushPanel) }),
+                iconChip(R.drawable.ic_erase, "Erase", { toggleEraseOnBrush() }),
             ),
             extended = brushPanel,
             gravity = Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter)
         // Shapes/Select → ShapesPanel
         val shapesShell = groupedToolbar("Shapes", "SHAPES",
-            compact = listOf(buttonChip("Shapes", { toggleShapesTool() })),
+            compact = listOf(iconChip(R.drawable.ic_shapes, "Shapes", { toggleShapesTool() })),
             extended = shapesPanel,
             gravity = Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter)
         // Blend/Smudge → BlendPanel
         val blendShell = groupedToolbar("Blend", "BLEND",
-            compact = listOf(buttonChip("Blend", { toggleBlendTool() })),
+            compact = listOf(iconChip(R.drawable.ic_blend, "Blend", { toggleBlendTool() })),
             extended = blendPanel,
             gravity = Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter)
         // Layers → LayersPanel
         val layersShell = groupedToolbar("Layers", "LAYERS",
-            compact = listOf(buttonChip("Layers", { togglePanel(layersPanel); layersPanel.refresh() })),
+            compact = listOf(iconChip(R.drawable.ic_layers, "Layers", { togglePanel(layersPanel); layersPanel.refresh() })),
             extended = layersPanel,
             gravity = Gravity.END or Gravity.CENTER_VERTICAL,
             snapshotter = snapshotter)
         // Image → ImagePanel
         val imageShell = groupedToolbar("Image", "IMAGE",
-            compact = listOf(buttonChip("Image", {
+            compact = listOf(iconChip(R.drawable.ic_image, "Image", {
                 togglePanel(imagePanel)
                 imagePanel.refresh()
                 if (shellOf[imagePanel]?.isShowing == true) {
@@ -254,33 +265,33 @@ class MainActivity : AppCompatActivity() {
         // Edit
         val editShell = buttonToolbar("Edit",
             listOf(
-                buttonChip("Undo", { undoButton.performClick() }),
-                buttonChip("Redo", { redoButton.performClick() }),
-                buttonChip("Del", {
+                iconChip(R.drawable.ic_undo, "Undo", { undoButton.performClick() }),
+                iconChip(R.drawable.ic_redo, "Redo", { redoButton.performClick() }),
+                iconChip(R.drawable.ic_clear, "Del", {
                     if (canvasView.viewModel.document.selection.deleteSelection()) {
                         canvasView.requestSceneRepaint()
                         toast("Selection deleted (Undo restores it)")
                     }
                 }),
-                buttonChip("Flip", { withSelection { it.flip(horizontal = true) } }),
-                buttonChip("Rot90", { withSelection { it.rotate(90f) } }),
-                buttonChip("Clear", { confirmClearLayer() }),
+                iconChip(R.drawable.ic_flip, "Flip", { withSelection { it.flip(horizontal = true) } }),
+                iconChip(R.drawable.ic_rot90, "Rot90", { withSelection { it.rotate(90f) } }),
+                iconChip(R.drawable.ic_clear, "Clear", { confirmClearLayer() }),
             ),
             gravity = Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter)
         // View/Export
         val viewShell = buttonToolbar("View/Export",
             listOf(
-                buttonChip("Demo", {
+                iconChip(R.drawable.ic_demo, "Demo", {
                     canvasView.runDemo()
                     toast("Demo: flying through nested rings - touch to cancel")
                 }),
-                buttonChip("Pins", { togglePanel(pinsPanel); pinsPanel.refresh() }),
-                buttonChip("−", { canvasView.zoomBy(0.5f) }),
-                buttonChip("+", { canvasView.zoomBy(2f) }),
-                buttonChip("Import", { importLauncher.launch("image/*") }),
-                buttonChip("PNG", { exportPng() }),
-                buttonChip("Video", { exportVideo() }),
+                iconChip(R.drawable.ic_pins, "Pins", { togglePanel(pinsPanel); pinsPanel.refresh() }),
+                iconChip(R.drawable.ic_zoom_out, "−", { canvasView.zoomBy(0.5f) }),
+                iconChip(R.drawable.ic_zoom_in, "+", { canvasView.zoomBy(2f) }),
+                iconChip(R.drawable.ic_import, "Import", { importLauncher.launch("image/*") }),
+                iconChip(R.drawable.ic_png, "PNG", { exportPng() }),
+                iconChip(R.drawable.ic_video, "Video", { exportVideo() }),
             ),
             gravity = Gravity.BOTTOM or Gravity.END,
             snapshotter = snapshotter)
@@ -405,19 +416,34 @@ class MainActivity : AppCompatActivity() {
         return shell
     }
 
-    /** A small pill-style chip button for grouped toolbars. */
-    private fun buttonChip(label: String, onClick: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            textSize = 11f
-            GlassStyle.button(this)
+    /** An icon chip for grouped toolbars: vector icon on top, small label below. */
+    private fun iconChip(iconRes: Int, label: String, onClick: () -> Unit): LinearLayout {
+        val density = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        val icon = ImageButton(this).apply {
+            setImageResource(iconRes)
+            GlassStyle.iconButton(this)
             Springs.attachPressFeedback(this)
             setOnClickListener { onClick() }
-            setAllCaps(false)
-            minHeight = (resources.displayMetrics.density * 32).toInt()
-            setPadding((resources.displayMetrics.density * 8).toInt(), 0,
-                (resources.displayMetrics.density * 8).toInt(), 0)
+            val size = (density * 24).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size)
+            setPadding(0, 0, 0, (density * 2).toInt())
         }
+        val text = TextView(this).apply {
+            text = label
+            textSize = 9f
+            setTextColor(GlassStyle.TEXT_SECONDARY)
+            setAllCaps(true)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        row.addView(icon)
+        row.addView(text)
+        return row
+    }
 
     private fun togglePanel(panel: View) {
         val shell = shellOf[panel] ?: return
@@ -716,7 +742,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (::lazyButton.isInitialized) {
             // P4.4: the Lazy section button mirrors the stabilizer state
-            lazyButton.text = if (canvasView.viewModel.lazyEnabled) "Lazy \u2713" else "Lazy \u2717"
+            lazyButton.text = if (canvasView.viewModel.lazyEnabled) "Lazy ON" else "Lazy"
         }
         if (::layersPanel.isInitialized) layersPanel.refresh()
         if (::pinsPanel.isInitialized) pinsPanel.refresh()

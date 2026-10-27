@@ -1,6 +1,10 @@
 package com.example.zoomart.model
 
 import kotlin.math.hypot
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.abs
+import kotlin.math.atan2
 
 /** Minimal path-building abstraction so outline geometry is JVM-testable. */
 interface PathSink {
@@ -61,6 +65,16 @@ object StrokeOutline {
                 ny = ry
             }
             var half = brush.widthForPressure(points[i].pressure01) * 0.5f
+            if (brush.angleDeg != 0f && len >= 1e-6f) {
+                // Calligraphy: width varies with stroke direction relative to nib
+                // angle. Perpendicular to nib = full width; parallel to nib =
+                // minimum width (the nib's thin edge).
+                val strokeAngle = atan2(ty, tx)
+                val nibAngle = Math.toRadians(brush.angleDeg.toDouble()).toFloat()
+                val dirFactor = abs(sin(strokeAngle - nibAngle))
+                val minDirRatio = 0.25f
+                half *= (minDirRatio + (1f - minDirRatio) * dirFactor)
+            }
             if (taperFactors != null) half *= taperFactors[i]
             left.add(floatArrayOf(points[i].x + nx * half, points[i].y + ny * half))
             right.add(floatArrayOf(points[i].x - nx * half, points[i].y - ny * half))

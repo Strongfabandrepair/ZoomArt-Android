@@ -67,13 +67,17 @@ class PlacedImage(
     /** UI-state display filter (grayscale / high-contrast render toggle). */
     var displayFilter: ImageDisplayFilter = ImageDisplayFilter.NONE
 
-    /** P4.2: applies a [x, y, w, h, rotation] record (undo/redo snapshots). */
+    /** P5 gap: horizontal mirror toggle for the image (FLIP tool). */
+    var flipH: Boolean = false
+
+    /** P4.2: applies a [x, y, w, h, rotation, flipH] record (undo/redo snapshots). */
     fun applyProps(p: FloatArray) {
         x = p[0]; y = p[1]; w = p[2]; h = p[3]; rotation = p[4]
+        if (p.size >= 6) flipH = p[5] != 0f
     }
 
-    /** P4.2: snapshot [x, y, w, h, rotation] (undo/redo records). */
-    fun props(): FloatArray = floatArrayOf(x, y, w, h, rotation)
+    /** P4.2: snapshot [x, y, w, h, rotation, flipH] (undo/redo records). */
+    fun props(): FloatArray = floatArrayOf(x, y, w, h, rotation, if (flipH) 1f else 0f)
 
     /**
      * Axis-aligned extents in the image's level-local frame. A rotated
@@ -449,14 +453,15 @@ class SelectionModel(private val doc: () -> DrawingDocument) {
         },
     ) { pts, cx, cy -> StrokeTransforms.rotateAbout(pts, cx, cy, deg) }
 
-    /**
-     * P4.2 (documented deviation): FLIP mirrors strokes and shapes only.
-     * Mirroring a rotated bitmap is visually ambiguous, so images keep
-     * their placement; use the two-finger pinch (rotate+scale) instead.
-     */
+    /** P5 gap: FLIP now mirrors images horizontally too (in addition to strokes/shapes).
+     * Images toggle their flipH flag and mirror their x position around the pivot.
+     * Use two-finger pinch (rotate+scale) for arbitrary rotation. */
     fun flip(horizontal: Boolean) = pivotPerLevel(
         pivotCorner = true,
-        imageTransform = null,
+        imageTransform = { img, px, py ->
+            img.flipH = !img.flipH
+            img.x = 2f * px - img.x - img.w
+        },
     ) { pts, px, py ->
         if (horizontal) StrokeTransforms.scaleAbout(pts, px, py, -1f, 1f)
         else StrokeTransforms.scaleAbout(pts, px, py, 1f, -1f)

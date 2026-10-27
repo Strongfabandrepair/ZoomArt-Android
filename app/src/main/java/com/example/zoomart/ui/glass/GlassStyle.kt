@@ -8,7 +8,21 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
+
+/** Brand palette (mirrors app/src/main/res/values/colors.xml). */
+object Brand {
+    /** Dark navy canvas background (#1A1C24). */
+    const val BACKGROUND = 0xFF1A1C24.toInt()
+    /** Inner-ring blue (#2E66F6). */
+    const val BLUE = 0xFF2E66F6.toInt()
+    /** Pressed/active blue (#1E4FB8). */
+    const val BLUE_DARK = 0xFF1E4FB8.toInt()
+    /** Outer ring / text white (#FFFFFF). */
+    const val WHITE = 0xFFFFFFFF.toInt()
+}
 
 /**
  * U1/U2 (UI overhaul): the design tokens + tiny styling helpers for the
@@ -69,6 +83,15 @@ object GlassStyle {
         b.backgroundTintList = ColorStateList.valueOf(BUTTON_FILL)
         b.setTextColor(TEXT_PRIMARY)
         b.isAllCaps = true
+    }
+
+    /** Dark-mode restyle for an icon ImageButton: navy fill, white icon, brand-blue when active. */
+    fun iconButton(b: ImageButton, active: Boolean = false) {
+        b.backgroundTintList = ColorStateList.valueOf(if (active) Brand.BLUE_DARK else BUTTON_FILL)
+        b.setColorFilter(TEXT_PRIMARY)
+        b.scaleType = ImageView.ScaleType.CENTER_INSIDE
+        b.setPadding((b.resources.displayMetrics.density * 6).toInt(), 0,
+            (b.resources.displayMetrics.density * 6).toInt(), 0)
     }
 
     /** Light-on-dark restyle for a text view. */

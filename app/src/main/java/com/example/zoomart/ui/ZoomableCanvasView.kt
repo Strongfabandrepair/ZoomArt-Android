@@ -1131,13 +1131,21 @@ class ZoomableCanvasView @JvmOverloads constructor(
             ImageDisplayFilter.HIGH_CONTRAST ->
                 ColorMatrixColorFilter(ColorMatrix(HIGH_CONTRAST_MATRIX))
         }
-        if (img.rotation == 0f) {
-            canvas.drawBitmap(bmp, null, RectF(img.x, img.y, img.x + img.w, img.y + img.h), imagePaint)
+        val left = img.x
+        val top = img.y
+        val right = img.x + img.w
+        val bottom = img.y + img.h
+        if (img.rotation == 0f && !img.flipH) {
+            canvas.drawBitmap(bmp, null, RectF(left, top, right, bottom), imagePaint)
         } else {
-            // P4.2: rotate about the image center (two-finger pinch)
+            // P4.2/P5: rotate about the image center (two-finger pinch)
+            // and/or horizontal mirror (FLIP tool)
             canvas.save()
-            canvas.rotate(img.rotation, img.x + img.w / 2f, img.y + img.h / 2f)
-            canvas.drawBitmap(bmp, null, RectF(img.x, img.y, img.x + img.w, img.y + img.h), imagePaint)
+            val cx = img.x + img.w / 2f
+            val cy = img.y + img.h / 2f
+            if (img.flipH) canvas.scale(-1f, 1f, cx, cy)
+            if (img.rotation != 0f) canvas.rotate(img.rotation, cx, cy)
+            canvas.drawBitmap(bmp, null, RectF(left, top, right, bottom), imagePaint)
             canvas.restore()
         }
         imagePaint.colorFilter = null

@@ -253,7 +253,7 @@ class GlassPanelTest {
                 assertEquals("panels start hidden", View.GONE, fp.visibility)
             }
         }
-        assertEquals("exactly one dock", 1, docks)
+        assertEquals("two docks (Edit + View/Export)", 2, docks)
 
         // Regression (found on-device): a MATCH_PARENT fill child inside the
         // WRAP_CONTENT shell used to blow the shell up to the whole screen.

@@ -14,8 +14,8 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -144,36 +144,8 @@ class MainActivity : AppCompatActivity() {
         // (show/drag-end only) for the API 31+ frosted blur.
         val snapshotter = BackdropSnapshotter(canvasView)
 
-        // U-overhaul: the toolbar is a floating glass dock (non-draggable:
-        // it stays anchored bottom-center — documented in
-        // docs/UI_OVERHAUL.md). It joins the same auto-hide pipeline.
-        // It is built FIRST so bottom-anchored panels can be inset above
-        // its measured height (the canvas is now full-bleed).
-        val dock = FloatingPanel(this, "ToolbarDock",
-            { p -> snapshotter.snapshot(p) }, kind = FloatingPanel.Kind.DOCK)
-        dock.setContent(buildToolbar())
-        val screenW = resources.displayMetrics.widthPixels
-        dock.measure(
-            android.view.View.MeasureSpec.makeMeasureSpec(screenW, android.view.View.MeasureSpec.AT_MOST),
-            android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED))
-        val dockInset = dock.measuredHeight +
-            (resources.displayMetrics.density * 14).toInt()
-
-        fun host(key: String, gravity: Int, panel: View, bottomAnchored: Boolean = true): FloatingPanel {
-            val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) })
-            shell.setContent(panel)
-            overlay.addShell(shell, gravity,
-                bottomInsetPx = if (bottomAnchored) dockInset else 0)
-            shellOf[panel] = shell
-            return shell
-        }
-        host("BrushPanel", Gravity.BOTTOM or Gravity.START, brushPanel)
-        host("LayersPanel", Gravity.END or Gravity.CENTER_VERTICAL, layersPanel, bottomAnchored = false)
-        host("PinsPanel", Gravity.TOP or Gravity.START, pinsPanel, bottomAnchored = false)
-        host("ShapesPanel", Gravity.BOTTOM or Gravity.START, shapesPanel)
-        host("BlendPanel", Gravity.BOTTOM or Gravity.START, blendPanel)
-        host("ImagePanel", Gravity.BOTTOM or Gravity.START, imagePanel)
-        overlay.setDock(dock, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+        // v0.7.0: grouped floating toolbars replace the monolithic dock.
+        buildGroupedToolbars(snapshotter)
 
         // v0.7.0: honor the persisted auto-hide preference.
         overlay.autoHideEnabled = AppSettings.getAutoHide(this)
@@ -204,11 +176,254 @@ class MainActivity : AppCompatActivity() {
         mainHandler.postDelayed(autosaveRunnable, 15_000L)
     }
 
+    // v0.7.0: grouped floating toolbars replace the single monolithic dock.
+    // Each group is its own FloatingPanel shell; groups with panels can extend
+    // into their full panel (chevron), groups without panels show inline buttons.
+    private fun buildGroupedToolbars(snapshotter: BackdropSnapshotter) {
+        colorSwatch = Button(this).apply { setOnClickListener { showColorPicker() } }
+        updateSwatch()
+
+        undoButton = Button(this).apply {
+            text = "Undo"
+            GlassStyle.button(this)
+            Springs.attachPressFeedback(this)
+            setOnClickListener {
+                canvasView.viewModel.undo()
+                canvasView.requestSceneRepaint()
+                refreshToolbar()
+            }
+        }
+        redoButton = Button(this).apply {
+            text = "Redo"
+            GlassStyle.button(this)
+            Springs.attachPressFeedback(this)
+            setOnClickListener {
+                canvasView.viewModel.redo()
+                canvasView.requestSceneRepaint()
+                refreshToolbar()
+            }
+        }
+        lazyButton = Button(this).apply {
+            text = "Lazy ✓"
+            GlassStyle.button(this)
+            Springs.attachPressFeedback(this)
+            setOnClickListener { toggleLazy() }
+        }
+
+        // ----- groups WITH panels: compact button → extends into full panel -----
+        // Brushes → BrushPanel
+        val brushesShell = groupedToolbar("Brushes", "BRUSHES",
+            compact = listOf(buttonChip("Brush", { togglePanel(brushPanel) })),
+            extended = brushPanel,
+            gravity = Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        // Shapes/Select → ShapesPanel
+        val shapesShell = groupedToolbar("Shapes", "SHAPES",
+            compact = listOf(buttonChip("Shapes", { toggleShapesTool() })),
+            extended = shapesPanel,
+            gravity = Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        // Blend/Smudge → BlendPanel
+        val blendShell = groupedToolbar("Blend", "BLEND",
+            compact = listOf(buttonChip("Blend", { toggleBlendTool() })),
+            extended = blendPanel,
+            gravity = Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        // Layers → LayersPanel
+        val layersShell = groupedToolbar("Layers", "LAYERS",
+            compact = listOf(buttonChip("Layers", { togglePanel(layersPanel); layersPanel.refresh() })),
+            extended = layersPanel,
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL,
+            snapshotter = snapshotter)
+        // Image → ImagePanel
+        val imageShell = groupedToolbar("Image", "IMAGE",
+            compact = listOf(buttonChip("Image", {
+                togglePanel(imagePanel)
+                imagePanel.refresh()
+                if (shellOf[imagePanel]?.isShowing == true) {
+                    toast("Image panel - acts on the selected or latest image")
+                }
+            })),
+            extended = imagePanel,
+            gravity = Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+
+        // ----- groups WITHOUT panels: inline button rows -----
+        // Edit
+        val editShell = buttonToolbar("Edit",
+            listOf(
+                buttonChip("Undo", { undoButton.performClick() }),
+                buttonChip("Redo", { redoButton.performClick() }),
+                buttonChip("Del", {
+                    if (canvasView.viewModel.document.selection.deleteSelection()) {
+                        canvasView.requestSceneRepaint()
+                        toast("Selection deleted (Undo restores it)")
+                    }
+                }),
+                buttonChip("Flip", { withSelection { it.flip(horizontal = true) } }),
+                buttonChip("Rot90", { withSelection { it.rotate(90f) } }),
+                buttonChip("Clear", { confirmClearLayer() }),
+            ),
+            gravity = Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        // View/Export
+        val viewShell = buttonToolbar("View/Export",
+            listOf(
+                buttonChip("Demo", {
+                    canvasView.runDemo()
+                    toast("Demo: flying through nested rings - touch to cancel")
+                }),
+                buttonChip("Pins", { togglePanel(pinsPanel); pinsPanel.refresh() }),
+                buttonChip("−", { canvasView.zoomBy(0.5f) }),
+                buttonChip("+", { canvasView.zoomBy(2f) }),
+                buttonChip("Import", { importLauncher.launch("image/*") }),
+                buttonChip("PNG", { exportPng() }),
+                buttonChip("Video", { exportVideo() }),
+            ),
+            gravity = Gravity.BOTTOM or Gravity.END,
+            snapshotter = snapshotter)
+
+        // Place all shells in the overlay. Panel groups anchor bottom/start
+        // (except Layers which is end-anchored); inline docks anchor bottom.
+        // The dock inset accounts for the bottom-anchored shells' height.
+        // (Each FloatingPanel manages its own rest position via SharedPreferences.)
+    }
+
+    /** A grouped toolbar: FloatingPanel with a header (label + chevron) and a
+     *  content area that swaps between compact buttons and the extended panel. */
+    private fun groupedToolbar(
+        key: String,
+        label: String,
+        compact: List<View>,
+        extended: View?,
+        gravity: Int,
+        snapshotter: BackdropSnapshotter,
+    ): FloatingPanel {
+        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) })
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        // Header row
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setGravity(Gravity.CENTER_VERTICAL)
+        }
+        val labelView = TextView(this).apply {
+            text = label
+            setTextColor(GlassStyle.TEXT_PRIMARY)
+            textSize = 11f
+            setAllCaps(true)
+        }
+        val chevron = Button(this).apply {
+            text = "▾"
+            textSize = 12f
+            GlassStyle.button(this)
+            Springs.attachPressFeedback(this)
+        }
+        header.addView(labelView, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(chevron, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        container.addView(header, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // Content frame: holds compact buttons OR extended panel
+        val content = FrameLayout(this)
+        container.addView(content, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        var extendedShown = false
+
+        fun showCompact() {
+            content.removeAllViews()
+            val row = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setGravity(Gravity.CENTER_VERTICAL)
+            }
+            for (v in compact) row.addView(v)
+            content.addView(row)
+            chevron.text = "▾"
+            extendedShown = false
+        }
+
+        fun showExtended() {
+            content.removeAllViews()
+            if (extended != null) content.addView(extended)
+            chevron.text = "▴"
+            extendedShown = true
+        }
+
+        chevron.setOnClickListener {
+            if (extendedShown) showCompact() else showExtended()
+        }
+        // Tapping the label also extends
+        labelView.setOnClickListener {
+            if (!extendedShown) showExtended()
+        }
+
+        showCompact()
+        shell.setContent(container)
+
+        // Register in shellOf so togglePanel / dismiss works
+        // (we register the panel view itself, not the shell)
+        if (extended is BrushPanel) shellOf[extended] = shell
+        if (extended is LayersPanel) shellOf[extended] = shell
+        if (extended is PinsPanel) shellOf[extended] = shell
+        if (extended is ShapesPanel) shellOf[extended] = shell
+        if (extended is BlendPanel) shellOf[extended] = shell
+        if (extended is ImagePanel) shellOf[extended] = shell
+
+        overlay.addShell(shell, gravity,
+            bottomInsetPx = if (gravity and Gravity.BOTTOM != 0) {
+                (resources.displayMetrics.density * 14).toInt()
+            } else 0)
+
+        return shell
+    }
+
+    /** A simple inline button toolbar (no panel): a FloatingPanel with a row of chips. */
+    private fun buttonToolbar(
+        key: String,
+        buttons: List<View>,
+        gravity: Int,
+        snapshotter: BackdropSnapshotter,
+    ): FloatingPanel {
+        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) }, kind = FloatingPanel.Kind.DOCK)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setGravity(Gravity.CENTER_VERTICAL)
+        }
+        for (v in buttons) container.addView(v)
+        shell.setContent(container)
+        overlay.addShell(shell, gravity,
+            bottomInsetPx = if (gravity and Gravity.BOTTOM != 0) {
+                (resources.displayMetrics.density * 14).toInt()
+            } else 0)
+        return shell
+    }
+
+    /** A small pill-style chip button for grouped toolbars. */
+    private fun buttonChip(label: String, onClick: () -> Unit): Button =
+        Button(this).apply {
+            text = label
+            textSize = 11f
+            GlassStyle.button(this)
+            Springs.attachPressFeedback(this)
+            setOnClickListener { onClick() }
+            setAllCaps(false)
+            minHeight = (resources.displayMetrics.density * 32).toInt()
+            setPadding((resources.displayMetrics.density * 8).toInt(), 0,
+                (resources.displayMetrics.density * 8).toInt(), 0)
+        }
+
     private fun togglePanel(panel: View) {
         val shell = shellOf[panel] ?: return
         val wasOpen = shell.isShowing
-        for (other in listOf(brushPanel, layersPanel, pinsPanel, shapesPanel, blendPanel, imagePanel)) {
-            shellOf[other]?.dismiss()
+        // Dismiss all other panel shells first (one panel at a time)
+        for (s in listOf(brushPanel, layersPanel, pinsPanel, shapesPanel, blendPanel, imagePanel)) {
+            val sh = shellOf[s]
+            if (sh != null && sh != shell) sh.dismiss()
         }
         if (wasOpen) {
             shell.dismiss()
@@ -216,126 +431,6 @@ class MainActivity : AppCompatActivity() {
             shell.show()
         }
     }
-
-    @SuppressLint("SetTextI18n")
-    private fun buildToolbar(): View {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        colorSwatch = Button(this).apply { setOnClickListener { showColorPicker() } }
-        updateSwatch()
-
-        undoButton = button("Undo") {
-            canvasView.viewModel.undo()
-            canvasView.requestSceneRepaint()
-            refreshToolbar()
-        }
-        redoButton = button("Redo") {
-            canvasView.viewModel.redo()
-            canvasView.requestSceneRepaint()
-            refreshToolbar()
-        }
-        val layersBtn = button("Layers") { togglePanel(layersPanel); layersPanel.refresh() }
-        val brushBtn = button("Brush") { togglePanel(brushPanel) }
-        val pinsBtn = button("Pins") { togglePanel(pinsPanel); pinsPanel.refresh() }
-        val pickBtn = button("Pick") {
-            canvasView.tool = ZoomableCanvasView.Tool.EYEDROPPER
-            toast("Tap the canvas to sample a color")
-        }
-        val eraseBtn = button("Erase") { toggleErase() }
-        val selBtn = button("Select") { toggleSelect() }
-        val shapesBtn = button("Shapes") { toggleShapesTool() }
-        val blendBtn = button("Blend") { toggleBlendTool() }
-        val imageBtn = button("Image") {
-            togglePanel(imagePanel)
-            imagePanel.refresh()
-            if (shellOf[imagePanel]?.isShowing == true) {
-                toast("Image panel - acts on the selected or latest image")
-            }
-        }
-        // P4.4 (audit UI): CLEAR the active layer behind a confirm dialog
-        val clearBtn = button("Clear") { confirmClearLayer() }
-        // P4.5 (audit UI): DEMO auto-draws nested rings + flies through them
-        val demoBtn = button("Demo") {
-            canvasView.runDemo()
-            toast("Demo: flying through nested rings - touch to cancel")
-        }
-        // P4.4 (audit UI): the Lazy section - quick stabilizer toggle
-        lazyButton = button("Lazy \u2713") { toggleLazy() }
-        val delBtn = button("Del") {
-            if (canvasView.viewModel.document.selection.deleteSelection()) {
-                canvasView.requestSceneRepaint()
-                toast("Selection deleted (Undo restores it)")
-            }
-        }
-        val flipBtn = button("FlipH") { withSelection { it.flip(horizontal = true) } }
-        val rotBtn = button("Rot90") { withSelection { it.rotate(90f) } }
-        val zoomOutBtn = button("-") { canvasView.zoomBy(0.5f) }
-        val zoomInBtn = button("+") { canvasView.zoomBy(2f) }
-        val impBtn = button("Import") { importLauncher.launch("image/*") }
-        val pngBtn = button("PNG") { exportPng() }
-        val videoBtn = button("Video") { exportVideo() }
-
-        // P4.4 (audit UI sections): Brushes / Blend / Shapes / Style / Lazy /
-        // Layers / Image / Edit — lightweight divider labels between the
-        // groups; one panel open at a time as before.
-        fun addSection(label: String?, views: List<View>) {
-            if (label != null) bar.addView(sectionLabel(label))
-            for (v in views) {
-                bar.addView(v, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT))
-            }
-        }
-        addSection("Brushes", listOf(brushBtn, eraseBtn))
-        addSection("Blend", listOf(blendBtn))
-        addSection("Shapes", listOf(shapesBtn))
-        addSection("Style", listOf(colorSwatch, pickBtn))
-        addSection("Lazy", listOf(lazyButton))
-        addSection("Layers", listOf(layersBtn))
-        addSection("Image", listOf(impBtn, imageBtn))
-        addSection("Edit", listOf(selBtn, undoButton, redoButton, delBtn, flipBtn, rotBtn, clearBtn))
-        // beyond the audit's eight sections: view/export utilities
-        addSection(null, listOf(demoBtn, pinsBtn, zoomOutBtn, zoomInBtn, pngBtn, videoBtn))
-
-        return HorizontalScrollView(this).apply {
-            addView(bar, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT))
-            isHorizontalFadingEdgeEnabled = true
-            // Real-device fix (Galaxy Tab S9 FE / One UI): the bottom toolbar
-            // sits inside the system gesture zone, so horizontal swipes were
-            // stolen as app-switch gestures. Exclude the dock (API 29+).
-            post {
-                if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    systemGestureExclusionRects = listOf(
-                        android.graphics.Rect(0, 0, width, height))
-                }
-            }
-        }
-    }
-
-    private fun button(label: String, onClick: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            GlassStyle.button(this) // U-overhaul: dark glass chip styling
-            setOnClickListener { onClick() }
-            Springs.attachPressFeedback(this) // U3: spring press feedback
-        }
-
-    /** P4.4/U-overhaul: small gray divider label between toolbar sections. */
-    private fun sectionLabel(title: String): android.widget.TextView =
-        android.widget.TextView(this).apply {
-            text = title
-            textSize = 10f
-            setTextColor(GlassStyle.TEXT_SECONDARY)
-            gravity = Gravity.CENTER_VERTICAL
-            val padH = (resources.displayMetrics.density * 6).toInt()
-            setPadding(padH, 0, padH, 0)
-            contentDescription = "section " + title
-        }
 
     /** P4.4: quick lazy-stabilizer toggle (mirrors the Brush panel control). */
     private fun toggleLazy() {

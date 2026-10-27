@@ -47,6 +47,7 @@ Persistent project-state file. Add one checkpoint row per bug fix, fix, or new f
 | 4 | 2026-10-27 | Phase 4: Live previews + color wheel | *(phase 4 commit)* | 200/200 green | Tab S9 FE installed + launched | BrushPanel live preview strip; ColorWheelView replaces HSV dialog |
 | 5 | 2026-10-27 | Phase 5: Responsiveness + branding + icons + gap fixes | *(phase 5 commit)* | 200/200 green | Note 8 (SM_N950U) installed + launched | Brand icon + colors on title page; vector icons on all toolbars; responsive cards; FLIP mirrors images; calligraphy direction-varying width; long-press drag layer reorder |
 | 6 | 2026-10-27 | Bug fixes + canvas rotation + glass UI + haptics | *(bug fix commit)* | 200/200 green | Note 8 (SM_N950U) installed + launched | OverlayLayer restores INVISIBLE docks; docks separated (Edit bottom-left, View/Export top-right); docks now draggable with handles; canvasRotationDegrees + two-finger rotate gesture; translucent glass buttons with brand-blue active state; press/selection haptics; icon press color feedback |
+| 7 | 2026-10-27 | Fix: dock crash on rotate + toolbar scrolling + dock orientation | *(bug fix commit)* | 200/200 green | Note 8 (SM_N950U) installed + launched | Removed unrotateEvent MotionEvent crash; HorizontalScrollView/ScrollView wrap toolbar content for scrolling; dock orientation setting (horizontal/vertical) in SettingsActivity; dock rest positions clamped to screen on rotation |
 
 ## How to use this file
 

@@ -1,0 +1,11 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local working backups - redundant with git history
+.uibackup/

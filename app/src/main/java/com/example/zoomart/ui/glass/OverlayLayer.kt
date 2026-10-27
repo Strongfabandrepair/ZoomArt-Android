@@ -82,10 +82,18 @@ class OverlayLayer(context: Context) : FrameLayout(context) {
 
     private fun applyAutoHidden(hidden: Boolean) {
         if (!autoHideEnabled) return
-        for (s in shells) {
-            if (s.isShowing) s.setAutoHidden(hidden)
+        if (hidden) {
+            for (s in shells) {
+                if (s.isShowing) s.setAutoHidden(true)
+            }
+            dock?.setAutoHidden(true)
+        } else {
+            // Restore every shell — docks were set to INVISIBLE when hidden,
+            // so isShowing() is false for them and they must be restored
+            // unconditionally here.
+            for (s in shells) s.setAutoHidden(false)
+            dock?.setAutoHidden(false)
         }
-        dock?.setAutoHidden(hidden)
     }
 
     /** Instantly brings everything back (used after demo/tour cancels). */

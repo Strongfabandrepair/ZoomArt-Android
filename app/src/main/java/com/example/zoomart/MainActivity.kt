@@ -278,7 +278,8 @@ class MainActivity : AppCompatActivity() {
                 iconChip(R.drawable.ic_clear, "Clear", { confirmClearLayer() }),
             ),
             gravity = Gravity.BOTTOM or Gravity.START,
-            snapshotter = snapshotter)
+            snapshotter = snapshotter,
+            kind = FloatingPanel.Kind.DOCK)
         // View/Export
         val viewShell = buttonToolbar("View/Export",
             listOf(
@@ -294,7 +295,8 @@ class MainActivity : AppCompatActivity() {
                 iconChip(R.drawable.ic_video, "Video", { exportVideo() }),
             ),
             gravity = Gravity.BOTTOM or Gravity.END,
-            snapshotter = snapshotter)
+            snapshotter = snapshotter,
+            kind = FloatingPanel.Kind.DOCK)
 
         // Place all shells in the overlay. Panel groups anchor bottom/start
         // (except Layers which is end-anchored); inline docks anchor bottom.
@@ -401,8 +403,9 @@ class MainActivity : AppCompatActivity() {
         buttons: List<View>,
         gravity: Int,
         snapshotter: BackdropSnapshotter,
+        kind: FloatingPanel.Kind = FloatingPanel.Kind.PANEL,
     ): FloatingPanel {
-        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) }, kind = FloatingPanel.Kind.DOCK)
+        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) }, kind = kind)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setGravity(Gravity.CENTER_VERTICAL)

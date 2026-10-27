@@ -11,6 +11,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.View
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
@@ -38,6 +39,7 @@ import com.example.zoomart.ui.PinsPanel
 import com.example.zoomart.ui.ShapesPanel
 import com.example.zoomart.ui.ZoomableCanvasView
 import com.example.zoomart.ui.glass.BackdropSnapshotter
+import com.example.zoomart.ui.glass.Brand
 import com.example.zoomart.ui.glass.FloatingPanel
 import com.example.zoomart.ui.glass.GlassStyle
 import com.example.zoomart.ui.glass.OverlayLayer
@@ -280,7 +282,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter,
             kind = FloatingPanel.Kind.DOCK)
-        // View/Export
+        // View/Export — anchored top-right so it never collides with Edit dock
         val viewShell = buttonToolbar("View/Export",
             listOf(
                 iconChip(R.drawable.ic_demo, "Demo", {
@@ -294,7 +296,7 @@ class MainActivity : AppCompatActivity() {
                 iconChip(R.drawable.ic_png, "PNG", { exportPng() }),
                 iconChip(R.drawable.ic_video, "Video", { exportVideo() }),
             ),
-            gravity = Gravity.BOTTOM or Gravity.END,
+            gravity = Gravity.TOP or Gravity.END,
             snapshotter = snapshotter,
             kind = FloatingPanel.Kind.DOCK)
 
@@ -426,15 +428,30 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        val icon = ImageButton(this).apply {
-            setImageResource(iconRes)
-            GlassStyle.iconButton(this)
-            Springs.attachPressFeedback(this)
-            setOnClickListener { onClick() }
+        val icon = ImageButton(this).also {
+            it.setImageResource(iconRes)
+            GlassStyle.iconButton(it)
+            Springs.attachPressFeedback(it)
+            it.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        GlassStyle.pressTap(this@MainActivity)
+                        it.setColorFilter(Brand.BLUE)
+                        false
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        it.setColorFilter(GlassStyle.TEXT_PRIMARY)
+                        false
+                    }
+                    else -> false
+                }
+            }
+            it.setOnClickListener { onClick(); GlassStyle.selectionTap(this@MainActivity) }
             val size = (density * 24).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, size)
-            setPadding(0, 0, 0, (density * 2).toInt())
+            it.layoutParams = LinearLayout.LayoutParams(size, size)
+            it.setPadding(0, 0, 0, (density * 2).toInt())
         }
+        row.addView(icon)
         val text = TextView(this).apply {
             text = label
             textSize = 9f
@@ -443,7 +460,6 @@ class MainActivity : AppCompatActivity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        row.addView(icon)
         row.addView(text)
         return row
     }

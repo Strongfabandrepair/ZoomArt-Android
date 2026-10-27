@@ -119,7 +119,8 @@ class FloatingPanel(
         if (kind == Kind.PANEL) {
             addView(handle, LayoutParams(LayoutParams.MATCH_PARENT, HANDLE_DP * density.toInt()))
         } else {
-            handle.visibility = GONE // docks are not draggable: no handle
+            // Docks get a thin drag handle too — tapped to drag, double-tap to collapse
+            addView(handle, LayoutParams(LayoutParams.MATCH_PARENT, (HANDLE_DP * 0.5f * density).toInt()))
         }
         addView(content, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 

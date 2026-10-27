@@ -83,6 +83,13 @@ class ZoomableCanvasView @JvmOverloads constructor(
     val effectiveTool: Tool get() =
         if (tool == Tool.DRAW && viewModel.currentBrush.erase) Tool.ERASE else tool
 
+    /** v0.7.0: canvas rotation in degrees, applied in onDraw. Two-finger rotate gesture. */
+    var canvasRotationDegrees: Float = 0f
+        private set
+
+    /** Last two-finger angle for rotation delta tracking. */
+    private var lastRotateAngle: Float? = null
+
     val viewModel = DrawingViewModel()
 
     var tool: Tool = Tool.DRAW
@@ -578,6 +585,17 @@ class ZoomableCanvasView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // v0.7.0: un-rotate touch coordinates when canvas is rotated,
+        // so all gesture math works in un-rotated canvas space.
+        val ev = if (canvasRotationDegrees != 0f) unrotateEvent(event) else event
+        return try {
+            onTouchEventRaw(ev)
+        } finally {
+            if (ev !== event) ev.recycle()
+        }
+    }
+
+    private fun onTouchEventRaw(event: MotionEvent): Boolean {
         val cam = viewModel.camera
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -621,6 +639,10 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 fingerPanning = false
                 tapDetector.onTouchEvent(event)
                 scaleDetector.onTouchEvent(event)
+                // v0.7.0: capture initial two-finger angle for rotation
+                if (event.pointerCount == 2) {
+                    lastRotateAngle = rotationAngle(event)
+                }
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
@@ -705,6 +727,18 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 } else {
                     tapDetector.onTouchEvent(event)
                     scaleDetector.onTouchEvent(event)
+                    // v0.7.0: two-finger canvas rotation (when not selecting)
+                    if (!selectionGesture && event.pointerCount == 2 && lastRotateAngle != null) {
+                        val newAngle = rotationAngle(event)
+                        var delta = newAngle - lastRotateAngle!!
+                        while (delta > 180f) delta -= 360f
+                        while (delta < -180f) delta += 360f
+                        if (delta != 0f) {
+                            canvasRotationDegrees += delta
+                            lastRotateAngle = newAngle
+                            invalidate()
+                        }
+                    }
                     // P4.2: while a SELECT pinch runs over a selection, the
                     // inter-pointer angle ROTATES it (onScale already scales
                     // it) — live, part of the same ONE undo step per gesture.
@@ -745,6 +779,8 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 }
                 tapDetector.onTouchEvent(event)
                 scaleDetector.onTouchEvent(event)
+                // v0.7.0: reset rotation tracking when fingers drop below 2
+                if (event.pointerCount < 2) lastRotateAngle = null
                 // a pinch survivor continues as the pan finger
                 if (!penGesture && !isDrawing && !scaleDetector.isInProgress) {
                     var remaining = -1
@@ -773,6 +809,50 @@ class ZoomableCanvasView @JvmOverloads constructor(
         return true
     }
 
+    /** v0.7.0: create a copy of [event] with all pointer coordinates un-rotated
+     *  by [canvasRotationDegrees] around the canvas center, so gesture math
+     *  works in un-rotated canvas space. Returns the original event unchanged
+     *  when rotation is zero. */
+    private fun unrotateEvent(event: MotionEvent): MotionEvent {
+        val angle = Math.toRadians((-canvasRotationDegrees).toDouble())
+        val ca = Math.cos(angle).toFloat()
+        val sa = Math.sin(angle).toFloat()
+        val cx = width / 2f
+        val cy = height / 2f
+
+        val count = event.pointerCount
+        val props = arrayOfNulls<MotionEvent.PointerProperties>(count)
+        val coords = arrayOfNulls<MotionEvent.PointerCoords>(count)
+        for (i in 0 until count) {
+            props[i] = MotionEvent.PointerProperties().apply { toolType = event.getToolType(i) }
+            coords[i] = MotionEvent.PointerCoords().apply {
+                val dx = event.getX(i) - cx
+                val dy = event.getY(i) - cy
+                x = cx + dx * ca - dy * sa
+                y = cy + dx * sa + dy * ca
+                pressure = event.getPressure(i)
+                size = event.getSize(i)
+            }
+        }
+
+        return MotionEvent.obtain(
+            event.downTime, event.eventTime, event.actionMasked, count,
+            props as Array<MotionEvent.PointerProperties>,
+            coords as Array<MotionEvent.PointerCoords>,
+            event.metaState, event.buttonState,
+            event.xPrecision, event.yPrecision,
+            event.deviceId, event.edgeFlags,
+            event.source, event.flags
+        )
+    }
+
+    /** v0.7.0: angle in degrees between the first two pointers. */
+    private fun rotationAngle(event: MotionEvent): Float {
+        val dx = event.getX(1) - event.getX(0)
+        val dy = event.getY(1) - event.getY(0)
+        return Math.toDegrees(Math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+    }
+
     override fun computeScroll() {
         if (scroller.computeScrollOffset()) {
             val dx = scroller.currX - lastFlingX
@@ -787,11 +867,15 @@ class ZoomableCanvasView @JvmOverloads constructor(
     private fun pressure01(raw: Float): Float = raw.coerceIn(0f, 1f)
 
     override fun onDraw(canvas: Canvas) {
+        // v0.7.0: apply canvas rotation around center
+        canvas.save()
+        canvas.rotate(canvasRotationDegrees, width / 2f, height / 2f)
         canvas.drawColor(Color.WHITE)
         drawScene(canvas)
         drawSelectionOverlay(canvas)
         drawLazyOverlay(canvas)
         drawZoomReadout(canvas)
+        canvas.restore()
     }
 
     /**

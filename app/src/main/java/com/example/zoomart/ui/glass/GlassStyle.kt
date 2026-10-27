@@ -1,11 +1,15 @@
 package com.example.zoomart.ui.glass
 
+import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
@@ -43,8 +47,11 @@ object GlassStyle {
     /** Secondary (label/hint) text. */
     const val TEXT_SECONDARY = 0xFF9AA3AF.toInt()
 
-    /** Dock/panel button fill. */
-    const val BUTTON_FILL = 0xFF2A2E37.toInt()
+    /** Dock/panel button fill (dark translucent glass). */
+    const val BUTTON_FILL = 0x802A2E37.toInt()   // 50% opaque glass
+
+    /** Active button fill (brand blue translucent). */
+    const val BUTTON_ACTIVE = 0x992E66F6.toInt()  // 60% opaque brand blue
 
     /** Accent (active state) tint. */
     const val ACCENT = 0xFF2E66F6.toInt()
@@ -137,5 +144,31 @@ object GlassStyle {
         val g = Color.green(color) + ((255 - Color.green(color)) * a).toInt()
         val b = Color.blue(color) + ((255 - Color.blue(color)) * a).toInt()
         return Color.argb(255, r, g, b)
+    }
+
+    /** Trigger a short selection haptic tap (tool toggles, panel opens, etc). */
+    fun selectionTap(context: Context) {
+        try {
+            val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+            } else {
+                @Suppress("DEPRECATION")
+                vib.vibrate(10)
+            }
+        } catch (_: Throwable) { /* haptics not available on this device */ }
+    }
+
+    /** Trigger a light press haptic (button down). */
+    fun pressTap(context: Context) {
+        try {
+            val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+            } else {
+                @Suppress("DEPRECATION")
+                vib.vibrate(5)
+            }
+        } catch (_: Throwable) { /* haptics not available on this device */ }
     }
 }

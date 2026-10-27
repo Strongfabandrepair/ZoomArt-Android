@@ -157,6 +157,32 @@ class SettingsActivity : AppCompatActivity() {
         col.addView(autosaveRow)
         col.addView(spacer(heightDp = 24f))
 
+        // ----- dock orientation -----
+        col.addView(sectionRow("Dock orientation", if (AppSettings.getDockOrientation(this) == 0) "Horizontal" else "Vertical"))
+        val dockOrientRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setGravity(Gravity.CENTER) }
+        val dockLabel = TextView(this).apply {
+            text = "Layout"
+            setTextColor(GlassStyle.TEXT_PRIMARY)
+            textSize = 14f
+        }
+        val dockPrev = smallButton("‹") {
+            val cur = AppSettings.getDockOrientation(this)
+            val nxt = if (cur == 0) 1 else 0
+            AppSettings.putDockOrientation(this, nxt)
+            dockLabel.text = if (nxt == 0) "Horizontal" else "Vertical"
+        }
+        val dockNext = smallButton("›") {
+            val cur = AppSettings.getDockOrientation(this)
+            val nxt = if (cur == 0) 1 else 0
+            AppSettings.putDockOrientation(this, nxt)
+            dockLabel.text = if (nxt == 0) "Horizontal" else "Vertical"
+        }
+        dockOrientRow.addView(dockPrev)
+        dockOrientRow.addView(dockLabel)
+        dockOrientRow.addView(dockNext)
+        col.addView(dockOrientRow)
+        col.addView(spacer())
+
         // ----- done button -----
         val doneBtn = glassButton("Done") {
             setResult(RESULT_OK)

@@ -49,6 +49,17 @@ object AppSettings {
         prefs(context).edit().putLong(KEY_AUTOSAVE_MS, ms).apply()
     }
 
+    // ----- dock orientation -----
+    private const val KEY_DOCK_ORIENTATION = "dock_orientation" // 0=horizontal, 1=vertical
+    private const val DEFAULT_DOCK_ORIENTATION = 0
+
+    fun getDockOrientation(context: Context): Int =
+        prefs(context).getInt(KEY_DOCK_ORIENTATION, DEFAULT_DOCK_ORIENTATION)
+
+    fun putDockOrientation(context: Context, orientation: Int) {
+        prefs(context).edit().putInt(KEY_DOCK_ORIENTATION, orientation).apply()
+    }
+
     // ----- resume eligibility -----
     /** Called by MainActivity on every successful save (quiet or not). */
     fun noteSessionSaved(context: Context) {

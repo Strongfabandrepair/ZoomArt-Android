@@ -15,9 +15,11 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -264,6 +266,9 @@ class MainActivity : AppCompatActivity() {
             snapshotter = snapshotter)
 
         // ----- groups WITHOUT panels: inline button rows -----
+        val dockOrient = AppSettings.getDockOrientation(this)
+        val dockVertical = dockOrient == 1
+
         // Edit
         val editShell = buttonToolbar("Edit",
             listOf(
@@ -279,9 +284,10 @@ class MainActivity : AppCompatActivity() {
                 iconChip(R.drawable.ic_rot90, "Rot90", { withSelection { it.rotate(90f) } }),
                 iconChip(R.drawable.ic_clear, "Clear", { confirmClearLayer() }),
             ),
-            gravity = Gravity.BOTTOM or Gravity.START,
+            gravity = if (dockVertical) Gravity.START or Gravity.BOTTOM else Gravity.BOTTOM or Gravity.START,
             snapshotter = snapshotter,
-            kind = FloatingPanel.Kind.DOCK)
+            kind = FloatingPanel.Kind.DOCK,
+            dockVertical = dockVertical)
         // View/Export — anchored top-right so it never collides with Edit dock
         val viewShell = buttonToolbar("View/Export",
             listOf(
@@ -296,9 +302,10 @@ class MainActivity : AppCompatActivity() {
                 iconChip(R.drawable.ic_png, "PNG", { exportPng() }),
                 iconChip(R.drawable.ic_video, "Video", { exportVideo() }),
             ),
-            gravity = Gravity.TOP or Gravity.END,
+            gravity = if (dockVertical) Gravity.END or Gravity.TOP else Gravity.TOP or Gravity.END,
             snapshotter = snapshotter,
-            kind = FloatingPanel.Kind.DOCK)
+            kind = FloatingPanel.Kind.DOCK,
+            dockVertical = dockVertical)
 
         // Place all shells in the overlay. Panel groups anchor bottom/start
         // (except Layers which is end-anchored); inline docks anchor bottom.
@@ -346,26 +353,29 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         // Content frame: holds compact buttons OR extended panel
-        val content = FrameLayout(this)
+        val content = HorizontalScrollView(this).apply {
+            isHorizontalFadingEdgeEnabled = true
+            isFillViewport = false
+        }
+        val contentRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setGravity(Gravity.CENTER_VERTICAL)
+        }
+        content.addView(contentRow)
         container.addView(content, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         var extendedShown = false
 
         fun showCompact() {
-            content.removeAllViews()
-            val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setGravity(Gravity.CENTER_VERTICAL)
-            }
-            for (v in compact) row.addView(v)
-            content.addView(row)
+            contentRow.removeAllViews()
+            for (v in compact) contentRow.addView(v)
             chevron.text = "▾"
             extendedShown = false
         }
 
         fun showExtended() {
-            content.removeAllViews()
+            contentRow.removeAllViews()
             if (extended != null) content.addView(extended)
             chevron.text = "▴"
             extendedShown = true
@@ -406,17 +416,40 @@ class MainActivity : AppCompatActivity() {
         gravity: Int,
         snapshotter: BackdropSnapshotter,
         kind: FloatingPanel.Kind = FloatingPanel.Kind.PANEL,
+        dockVertical: Boolean = false,
     ): FloatingPanel {
         val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) }, kind = kind)
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setGravity(Gravity.CENTER_VERTICAL)
+        val density = resources.displayMetrics.density
+
+        if (dockVertical) {
+            // Vertical layout: buttons stack vertically, scrollable
+            val scroll = ScrollView(this).apply {
+                isFillViewport = false
+            }
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setGravity(Gravity.CENTER_HORIZONTAL)
+            }
+            scroll.addView(container)
+            for (v in buttons) container.addView(v)
+            shell.setContent(scroll)
+        } else {
+            // Horizontal layout: buttons in a row, scrollable horizontally
+            val scroll = HorizontalScrollView(this).apply {
+                isHorizontalFadingEdgeEnabled = true
+                isFillViewport = false
+            }
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setGravity(Gravity.CENTER_VERTICAL)
+            }
+            scroll.addView(container)
+            for (v in buttons) container.addView(v)
+            shell.setContent(scroll)
         }
-        for (v in buttons) container.addView(v)
-        shell.setContent(container)
         overlay.addShell(shell, gravity,
             bottomInsetPx = if (gravity and Gravity.BOTTOM != 0) {
-                (resources.displayMetrics.density * 14).toInt()
+                (density * 14).toInt()
             } else 0)
         return shell
     }

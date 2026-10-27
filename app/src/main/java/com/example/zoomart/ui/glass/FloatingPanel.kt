@@ -368,8 +368,18 @@ class FloatingPanel(
             val saved = savedRest
             when {
                 saved != null -> {
-                    // the drag-persisted position (savedRest consumed once)
-                    applyRest(saved[0].toFloat(), saved[1].toFloat())
+                    // Clamp saved position to current screen so docks don't
+                    // disappear after rotation/orientation change.
+                    val p = parent as? View
+                    if (p != null && width > 0 && height > 0) {
+                        val clamped = PanelGeometry.clampOffset(
+                            saved[0].toFloat(), saved[1].toFloat(),
+                            p.width, p.height, width, height
+                        )
+                        applyRest(clamped[0], clamped[1])
+                    } else {
+                        applyRest(saved[0].toFloat(), saved[1].toFloat())
+                    }
                     savedRest = null
                 }
                 !restFrozen && width > 0 -> {

@@ -44,6 +44,7 @@ import com.example.zoomart.model.SmudgeData
 import com.example.zoomart.model.StampData
 import com.example.zoomart.model.StrokeData
 import com.example.zoomart.model.StrokeOutline
+import com.example.zoomart.model.StrokePoint
 import com.example.zoomart.model.TouchRouting
 import com.example.zoomart.model.ZoomLevel
 import java.io.File
@@ -151,21 +152,28 @@ class ZoomableCanvasView @JvmOverloads constructor(
 
     private val readoutPaint = Paint().apply {
         isAntiAlias = true
-        // U-overhaul: light text on the dark glass chip (dark-mode contrast)
-        color = 0xFFE8EAEE.toInt()
+        // v0.7.0: neutral text on the crisp dark chip (measured chrome)
+        color = 0xFFECEDEF.toInt()
         textSize = 14f * resources.displayMetrics.density
     }
 
-    /** U-overhaul: the HUD chip's dark scrim + hairline border. */
+    /** v0.7.0: the LEVEL NUMBER renders in the amber accent (spec 6). */
+    private val readoutAccentPaint = Paint().apply {
+        isAntiAlias = true
+        color = 0xFFFFAD01.toInt()
+        textSize = 14f * resources.displayMetrics.density
+    }
+
+    /** v0.7.0: the HUD chip's near-opaque neutral fill (spec 6). */
     private val hudChipPaint = Paint().apply {
         isAntiAlias = true
-        color = 0xB816181D.toInt() // same scrim as the floating panels
+        color = 0xE616171B.toInt()
     }
     private val hudBorderPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeWidth = 1f
-        color = 0x14FFFFFF.toInt()
+        color = 0x1FFFFFFF.toInt()
     }
 
     private val scratchPath = Path()
@@ -193,6 +201,18 @@ class ZoomableCanvasView @JvmOverloads constructor(
         isAntiAlias = true
         style = Paint.Style.FILL
         color = 0xE62E66F6.toInt()
+    }
+    /** P4.7: eraser size preview — a soft ink disc with a crisp ring. */
+    private val eraserPreviewFillPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.FILL
+        color = 0x1F16181D
+    }
+    private val eraserPreviewRingPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        color = 0xB316181D.toInt()
     }
     private val handleFillPaint = Paint().apply {
         isAntiAlias = true
@@ -263,6 +283,13 @@ class ZoomableCanvasView @JvmOverloads constructor(
     /** Last pen position in SCREEN px (lazy overlay anchor). */
     private var lastPenScreenX = 0f
     private var lastPenScreenY = 0f
+
+    /**
+     * P4.7: last pen position for the ERASER size preview ring.
+     * -1 = the pen has never touched the canvas, so nothing is drawn.
+     */
+    private var lastEraserScreenX = -1f
+    private var lastEraserScreenY = -1f
 
     /** Corner-handle hit target half-extent in screen px (>= 40px square). */
     private val handleTouchHalfPx = 24f
@@ -429,6 +456,8 @@ class ZoomableCanvasView @JvmOverloads constructor(
             }
             Tool.ERASE -> {
                 viewModel.beginErase(cam.screenToLocalX(x), cam.screenToLocalY(y))
+                lastEraserScreenX = x
+                lastEraserScreenY = y
                 isDrawing = true
             }
             Tool.SHAPE -> {
@@ -593,8 +622,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 penGesture = isPenEvent(event)
                 if (penGesture) {
                     fingerPanning = false
+                    val uv = unrotateScreen(event.x, event.y)
                     startPenGesture(
-                        event.getToolType(0), event.x, event.y,
+                        event.getToolType(0), uv[0], uv[1],
                         pressure01(event.pressure),
                     )
                 } else {
@@ -610,8 +640,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 if (isPenEvent(event, idx)) {
                     if (isDrawing) return true // a second pen never joins a gesture
                     fingerPanning = false
+                    val uv = unrotateScreen(event.getX(idx), event.getY(idx))
                     startPenGesture(
-                        event.getToolType(idx), event.getX(idx), event.getY(idx),
+                        event.getToolType(idx), uv[0], uv[1],
                         pressure01(event.getPressure(idx)),
                     )
                     return true // pen pointers stay out of the pinch detector
@@ -639,34 +670,41 @@ class ZoomableCanvasView @JvmOverloads constructor(
                     when (gestureTool) {
                         Tool.DRAW -> {
                             for (i in 0 until event.historySize) {
+                                val uv = unrotateScreen(
+                                    event.getHistoricalX(i), event.getHistoricalY(i))
                                 viewModel.extendStrokeAtScreen(
-                                    event.getHistoricalX(i),
-                                    event.getHistoricalY(i),
+                                    uv[0], uv[1],
                                     pressure01(event.getHistoricalPressure(i)),
                                 )
                             }
+                            val uv = unrotateScreen(event.x, event.y)
                             viewModel.extendStrokeAtScreen(
-                                event.x, event.y, pressure01(event.pressure))
-                            lastPenScreenX = event.x
-                            lastPenScreenY = event.y
+                                uv[0], uv[1], pressure01(event.pressure))
+                            lastPenScreenX = uv[0]
+                            lastPenScreenY = uv[1]
                         }
                         Tool.ERASE -> {
+                            val uv = unrotateScreen(event.x, event.y)
+                            lastEraserScreenX = uv[0]
+                            lastEraserScreenY = uv[1]
                             viewModel.eraseTo(
-                                cam.screenToLocalX(event.x),
-                                cam.screenToLocalY(event.y),
+                                cam.screenToLocalX(uv[0]),
+                                cam.screenToLocalY(uv[1]),
                             )
                         }
                         Tool.SHAPE -> {
                             // P3.1: rubber-band the preview to the pen
+                            val uv = unrotateScreen(event.x, event.y)
                             viewModel.extendShapeGesture(
-                                cam.screenToLocalX(event.x),
-                                cam.screenToLocalY(event.y),
+                                cam.screenToLocalX(uv[0]),
+                                cam.screenToLocalY(uv[1]),
                             )
                         }
                         Tool.SMUDGE -> {
                             // P3.3: sample + carry + deposit along the drag
+                            val uv = unrotateScreen(event.x, event.y)
                             viewModel.extendSmudge(
-                                event.x, event.y, pressure01(event.pressure), smudgeSampler())
+                                uv[0], uv[1], pressure01(event.pressure), smudgeSampler())
                         }
                         Tool.SELECT -> {
                             if (resizingCorner >= 0 && isTransformingSelection) {
@@ -822,6 +860,31 @@ class ZoomableCanvasView @JvmOverloads constructor(
 
     private fun pressure01(raw: Float): Float = raw.coerceIn(0f, 1f)
 
+    /** Undoes the canvas's on-screen rotation ([canvasRotationDegrees]) for a
+     *  raw SCREEN point, about the same center pivot [onDraw] rotates
+     *  around, so the stylus tip and the drawn mark land on top of each
+     *  other at any rotation angle. Rotation 0 (and zero-size views) pass
+     *  the point through unchanged.
+     *
+     *  Finger panning/pinching intentionally stay in raw screen space:
+     *  they track the finger on screen — the camera shifts content by the
+     *  same screen delta the finger travels, which is correct under
+     *  rotation too. Only pen-driven GEOMETRY (strokes, erase, shapes,
+     *  smudge, select, marquee, bookmarks, eyedropper, lazy overlay) is
+     *  un-rotated before the screen -> local conversion. */
+    private fun unrotateScreen(x: Float, y: Float): FloatArray {
+        val r = canvasRotationDegrees
+        if (r == 0f || width <= 0f || height <= 0f) return floatArrayOf(x, y)
+        val a = Math.toRadians((-r).toDouble())
+        val c = kotlin.math.cos(a).toFloat()
+        val s = kotlin.math.sin(a).toFloat()
+        val cx = width / 2f
+        val cy = height / 2f
+        val dx = x - cx
+        val dy = y - cy
+        return floatArrayOf(cx + dx * c - dy * s, cy + dx * s + dy * c)
+    }
+
     override fun onDraw(canvas: Canvas) {
         // Draw scene + overlays WITH canvas rotation applied
         canvas.save()
@@ -830,6 +893,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
         drawScene(canvas)
         drawSelectionOverlay(canvas)
         drawLazyOverlay(canvas)
+        drawEraserPreview(canvas)
         canvas.restore()
 
         // Zoom readout is drawn in SCREEN space (NOT rotated with canvas),
@@ -849,18 +913,25 @@ class ZoomableCanvasView @JvmOverloads constructor(
         val d = resources.displayMetrics.density
         val padH = 14f * d
         val padV = 6f * d
-        val textW = readoutPaint.measureText(text)
-        val chipW = textW + padH * 2f
+        // v0.7.0 (spec 6): monochrome label + AMBER level number
+        val split = text.lastIndexOf(' ')
+        val label = text.substring(0, split + 1)
+        val number = text.substring(split + 1)
+        val labelW = readoutPaint.measureText(label)
+        val numberW = readoutAccentPaint.measureText(number)
+        val chipW = labelW + numberW + padH * 2f
         val chipH = readoutPaint.textSize + padV * 2f
         val cx = width / 2f
         val top = 14f * d
         val left = cx - chipW / 2f
         val rect = RectF(left, top, left + chipW, top + chipH)
-        val radius = chipH / 2f
+        val radius = 8f * d
         canvas.drawRoundRect(rect, radius, radius, hudChipPaint)
         canvas.drawRoundRect(rect, radius, radius, hudBorderPaint)
         val baseline = top + padV + readoutPaint.textSize * 0.8f
-        canvas.drawText(text, cx - textW / 2f, baseline, readoutPaint)
+        canvas.drawText(label, cx - (labelW + numberW) / 2f, baseline, readoutPaint)
+        canvas.drawText(number, cx - (labelW + numberW) / 2f + labelW, baseline,
+            readoutAccentPaint)
     }
 
     fun cameraReadout(): String {
@@ -917,6 +988,23 @@ class ZoomableCanvasView @JvmOverloads constructor(
         canvas.drawCircle(brushX, brushY, 6f, lazyDotPaint)
         val r = viewModel.lazyBrush.radiusScreen
         if (r > 2f) canvas.drawCircle(brushX, brushY, r, lazyPaint)
+    }
+
+    /**
+     * P4.7: eraser size preview — draws the eraser's on-screen circle at
+     * the pen so the user sees exactly how big "Erase size" is from the
+     * Brush panel's slider. The eraser's screen radius equals
+     * eraserRadiusWorld px at any zoom, so this ring is 1:1 with the carve
+     * area. Drawn whenever the erase tool is armed and the pen has ever
+     * touched the canvas, including while adjusting the slider.
+     */
+    private fun drawEraserPreview(canvas: Canvas) {
+        if (lastEraserScreenX < 0f) return
+        val effective = effectiveTool
+        if (effective != Tool.ERASE) return
+        val r = viewModel.eraserRadiusWorld.coerceAtLeast(1f)
+        canvas.drawCircle(lastEraserScreenX, lastEraserScreenY, r, eraserPreviewFillPaint)
+        canvas.drawCircle(lastEraserScreenX, lastEraserScreenY, r, eraserPreviewRingPaint)
     }
 
     /**
@@ -1092,7 +1180,16 @@ class ZoomableCanvasView @JvmOverloads constructor(
                     m.setScale(k, k)
                     m.postTranslate(t[1], t[2])
                     canvas.concat(m)
-                    drawStroke(canvas, s, active.opacity)
+                    // P3.2: while a LAZY gesture runs, the live stroke renders
+                    // through the midpoint-quadratic smoother so the mark is
+                    // smooth for the WHOLE gesture (not only after commit).
+                    // The stroke's own points stay RAW rope samples — only
+                    // the drawn path is smoothed, once per frame, so the
+                    // point count can never grow exponentially.
+                    val livePts = if (viewModel.lazyActive && s.points.size >= 2) {
+                        LazyBrush.smoothPoints(s.points.toList())
+                    } else null
+                    drawStroke(canvas, s, active.opacity, livePts)
                     canvas.restore()
                     if (blended) canvas.restore()
                 }
@@ -1323,7 +1420,12 @@ class ZoomableCanvasView @JvmOverloads constructor(
         }
     }
 
-    private fun drawStroke(canvas: Canvas, stroke: StrokeData, layerOpacity: Float) {
+    private fun drawStroke(
+        canvas: Canvas,
+        stroke: StrokeData,
+        layerOpacity: Float,
+        ptsOverride: List<StrokePoint>? = null,
+    ) {
         val brush = stroke.brush
         // Constant stroke-level alpha for the outline/dash paths (they draw
         // one path per stroke, so per-point alpha cannot apply there; pencil
@@ -1331,7 +1433,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
         // collapses to plain opacity for non-pressure-opacity brushes.
         val alpha = (brush.alphaForPressure(stroke.points.firstOrNull()?.pressure01 ?: 1f) *
             layerOpacity * 255f).toInt().coerceIn(0, 255)
-        val pts = stroke.points.toList()
+        // [ptsOverride] lets the LIVE lazy stroke render through the
+        // smoother without mutating the committed points (see drawScene).
+        val pts = ptsOverride ?: stroke.points.toList()
         if (pts.isEmpty()) return
         if (pts.size == 1) {
             strokeFillPaint.pathEffect = null
@@ -1357,9 +1461,17 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 strokeFillPaint.alpha =
                     (brush.alphaForPressure(pressure) * layerOpacity * 255f)
                         .toInt().coerceIn(0, 255)
-                val ox = (rnd.nextFloat() * 2f - 1f) * brush.scatterWorld
-                val oy = (rnd.nextFloat() * 2f - 1f) * brush.scatterWorld
-                canvas.drawCircle(x + ox, y + oy, r, strokeFillPaint)
+                // Spray paint: scatter in a disk (not a square grid), vary each
+                // particle's size and opacity so it reads as aerosol particles
+                // landing around the stroke path rather than a dotted line.
+                val angle = rnd.nextFloat() * 2f * kotlin.math.PI.toFloat()
+                val radius = rnd.nextFloat() * brush.scatterWorld
+                val ox = kotlin.math.cos(angle.toDouble()).toFloat() * radius
+                val oy = kotlin.math.sin(angle.toDouble()).toFloat() * radius
+                val size = (0.6f + rnd.nextFloat() * 0.8f) * r
+                val alpha = (0.5f + rnd.nextFloat() * 0.5f).coerceIn(0f, 1f)
+                strokeFillPaint.alpha = ((strokeFillPaint.alpha / 255f) * alpha * 255f).toInt().coerceIn(0, 255)
+                canvas.drawCircle(x + ox, y + oy, size.coerceAtLeast(1f), strokeFillPaint)
             }
             stamp(pts[0].x, pts[0].y,
                 brush.widthForPressure(pts[0].pressure01) * 0.5f, pts[0].pressure01)

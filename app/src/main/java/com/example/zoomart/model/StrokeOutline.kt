@@ -68,11 +68,13 @@ object StrokeOutline {
             if (brush.angleDeg != 0f && len >= 1e-6f) {
                 // Calligraphy: width varies with stroke direction relative to nib
                 // angle. Perpendicular to nib = full width; parallel to nib =
-                // minimum width (the nib's thin edge).
+                // minimum width (the nib's thin edge). A lower ratio makes the
+                // thick/thin contrast readable so calligraphy actually tapers
+                // instead of just scaling uniformly with the size slider.
                 val strokeAngle = atan2(ty, tx)
                 val nibAngle = Math.toRadians(brush.angleDeg.toDouble()).toFloat()
                 val dirFactor = abs(sin(strokeAngle - nibAngle))
-                val minDirRatio = 0.25f
+                val minDirRatio = 0.12f
                 half *= (minDirRatio + (1f - minDirRatio) * dirFactor)
             }
             if (taperFactors != null) half *= taperFactors[i]

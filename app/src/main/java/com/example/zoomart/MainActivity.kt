@@ -3,6 +3,7 @@ package com.example.zoomart
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -13,14 +14,10 @@ import android.view.Gravity
 import android.view.View
 import android.view.MotionEvent
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -75,10 +72,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var shapesPanel: ShapesPanel
     private lateinit var blendPanel: BlendPanel
     private lateinit var imagePanel: ImagePanel
-    private lateinit var colorSwatch: Button
-    private lateinit var undoButton: Button
-    private lateinit var redoButton: Button
-    private lateinit var lazyButton: Button
+    /** v0.7.0: the slim icon strip — every control is a 48dp line-icon
+     *  chip; contentDescription keeps the legacy label words (a11y +
+     *  dump-based tests keep matching). */
+    private val stripChips = LinkedHashMap<String, ImageButton>()
+    private val stripDots = HashMap<String, View>()
+    private lateinit var colorSwatch: View
+    private lateinit var undoButton: ImageButton
+    private lateinit var redoButton: ImageButton
+    private lateinit var lazyButton: ImageButton
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var exportRunning = false
@@ -109,7 +111,10 @@ class MainActivity : AppCompatActivity() {
             this,
             // v0.7.0: selecting a preset resets erase (smart switch back to draw).
             { brush -> canvasView.viewModel.selectBrushPreset(brush); updateSwatch() },
-            { radius -> canvasView.viewModel.eraserRadiusWorld = radius },
+            { radius ->
+                canvasView.viewModel.eraserRadiusWorld = radius
+                canvasView.requestSceneRepaint()
+            },
             // P3.2: lazy stabilizer toggle + rope radius (screen px)
             { on, radius ->
                 canvasView.viewModel.lazyEnabled = on
@@ -149,13 +154,11 @@ class MainActivity : AppCompatActivity() {
         // (show/drag-end only) for the API 31+ frosted blur.
         val snapshotter = BackdropSnapshotter(canvasView)
 
-        // v0.7.0: grouped floating toolbars replace the monolithic dock.
-        // Each group is its own FloatingPanel shell; groups with panels can extend
-        // into their full panel (chevron), groups without panels show inline buttons.
-        buildGroupedToolbars(snapshotter)
+        // v0.7.0 REVISION: ONE slim monochrome icon strip (the reference
+        // icons.jpg language — docs/UI_STYLE_SPEC.md section 3) plus the
+        // six floating panels behind it. The color swatch rides the strip.
+        buildToolStrip(snapshotter)
 
-        // v0.7.0: color swatch button — floating color picker toggle.
-        colorSwatch.setOnClickListener { showColorPicker() }
         updateSwatch()
         overlay.autoHideEnabled = AppSettings.getAutoHide(this)
 
@@ -179,329 +182,248 @@ class MainActivity : AppCompatActivity() {
         }
         // Apply persisted default brush preset.
         canvasView.viewModel.currentBrush = BrushPresets.all[AppSettings.getBrushPresetIndex(this)].second
+        // The brush panel reflects that spec (dash/angle/scatter fields
+        // included) before the user touches a slider.
+        brushPanel.syncFrom(canvasView.viewModel.currentBrush)
 
         loadSession()
         refreshToolbar()
 
-        // v0.7.0: color swatch button — floating color picker toggle.
-        colorSwatch.setOnClickListener { showColorPicker() }
-        updateSwatch()
-        val colorSwatchShell = FloatingPanel(this, "Color", { p -> snapshotter.snapshot(p) })
-        colorSwatchShell.setContent(colorSwatch)
-        overlay.addShell(colorSwatchShell, Gravity.END or Gravity.BOTTOM,
-            bottomInsetPx = (resources.displayMetrics.density * 18).toInt())
 
         mainHandler.postDelayed(autosaveRunnable, 15_000L)
     }
 
-    // v0.7.0: grouped floating toolbars replace the single monolithic dock.
-    // Each group is its own FloatingPanel shell; groups with panels can extend
-    // into their full panel (chevron), groups without panels show inline buttons.
-    private fun buildGroupedToolbars(snapshotter: BackdropSnapshotter) {
-        colorSwatch = Button(this).apply { setOnClickListener { showColorPicker() } }
-        updateSwatch()
+    // ------------------------------------------------------------------
+    // v0.7.0 REVISION — the slim monochrome icon strip (docs/UI_STYLE_SPEC
+    // .md section 3). ONE horizontally-scrollable dock: 24dp thin line-art
+    // icons in 48dp targets, neutral strokes, NO labels/headers/dividers —
+    // the old 8-section grouping is expressed purely as 14dp spacing gaps.
+    // Active tool = amber tint + 4dp underline dot.
+    // ------------------------------------------------------------------
 
-        undoButton = Button(this).apply {
-            text = "Undo"
-            setCompoundDrawablesRelativeWithIntrinsicBounds(
-                resources.getDrawable(R.drawable.ic_undo), null, null, null)
-            setCompoundDrawablePadding((resources.displayMetrics.density * 4).toInt())
-            GlassStyle.button(this)
-            Springs.attachPressFeedback(this)
-            setOnClickListener {
-                canvasView.viewModel.undo()
-                canvasView.requestSceneRepaint()
-                refreshToolbar()
-            }
-        }
-        redoButton = Button(this).apply {
-            text = "Redo"
-            setCompoundDrawablesRelativeWithIntrinsicBounds(
-                resources.getDrawable(R.drawable.ic_redo), null, null, null)
-            setCompoundDrawablePadding((resources.displayMetrics.density * 4).toInt())
-            GlassStyle.button(this)
-            Springs.attachPressFeedback(this)
-            setOnClickListener {
-                canvasView.viewModel.redo()
-                canvasView.requestSceneRepaint()
-                refreshToolbar()
-            }
-        }
-        lazyButton = Button(this).apply {
-            text = "Lazy"
-            setCompoundDrawablesRelativeWithIntrinsicBounds(
-                resources.getDrawable(R.drawable.ic_lazy), null, null, null)
-            setCompoundDrawablePadding((resources.displayMetrics.density * 4).toInt())
-            GlassStyle.button(this)
-            Springs.attachPressFeedback(this)
-            setOnClickListener { toggleLazy() }
-        }
-
-        // ----- groups WITH panels: compact button → extends into full panel -----
-        // Brushes → BrushPanel (compact: Brush chip + Erase toggle chip)
-        val brushesShell = groupedToolbar("Brushes", "BRUSHES",
-            compact = listOf(
-                iconChip(R.drawable.ic_brush, "Brush", { togglePanel(brushPanel) }),
-                iconChip(R.drawable.ic_erase, "Erase", { toggleEraseOnBrush() }),
-            ),
-            extended = brushPanel,
-            gravity = Gravity.BOTTOM or Gravity.START,
-            snapshotter = snapshotter)
-        // Shapes/Select → ShapesPanel
-        val shapesShell = groupedToolbar("Shapes", "SHAPES",
-            compact = listOf(iconChip(R.drawable.ic_shapes, "Shapes", { toggleShapesTool() })),
-            extended = shapesPanel,
-            gravity = Gravity.BOTTOM or Gravity.START,
-            snapshotter = snapshotter)
-        // Blend/Smudge → BlendPanel
-        val blendShell = groupedToolbar("Blend", "BLEND",
-            compact = listOf(iconChip(R.drawable.ic_blend, "Blend", { toggleBlendTool() })),
-            extended = blendPanel,
-            gravity = Gravity.BOTTOM or Gravity.START,
-            snapshotter = snapshotter)
-        // Layers → LayersPanel
-        val layersShell = groupedToolbar("Layers", "LAYERS",
-            compact = listOf(iconChip(R.drawable.ic_layers, "Layers", { togglePanel(layersPanel); layersPanel.refresh() })),
-            extended = layersPanel,
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL,
-            snapshotter = snapshotter)
-        // Image → ImagePanel
-        val imageShell = groupedToolbar("Image", "IMAGE",
-            compact = listOf(iconChip(R.drawable.ic_image, "Image", {
-                togglePanel(imagePanel)
-                imagePanel.refresh()
-                if (shellOf[imagePanel]?.isShowing == true) {
-                    toast("Image panel - acts on the selected or latest image")
-                }
-            })),
-            extended = imagePanel,
-            gravity = Gravity.BOTTOM or Gravity.START,
-            snapshotter = snapshotter)
-
-        // ----- groups WITHOUT panels: inline button rows -----
-        // Single bottom dock with all editing + view/export buttons in a
-        // horizontally-scrollable row. Buttons from both logical groups
-        // (Edit + View/Export) share the same dock to avoid overlap.
-        val allDockButtons = listOf(
-            iconChip(R.drawable.ic_undo, "Undo", { undoButton.performClick() }),
-            iconChip(R.drawable.ic_redo, "Redo", { redoButton.performClick() }),
-            iconChip(R.drawable.ic_clear, "Del", {
-                if (canvasView.viewModel.document.selection.deleteSelection()) {
-                    canvasView.requestSceneRepaint()
-                    toast("Selection deleted (Undo restores it)")
-                }
-            }),
-            iconChip(R.drawable.ic_clear, "Clear", { confirmClearLayer() }),
-            iconChip(R.drawable.ic_brush, "Brushes", { togglePanel(brushPanel) }),
-            iconChip(R.drawable.ic_layers, "Layers", { togglePanel(layersPanel) }),
-            iconChip(R.drawable.ic_zoom_out, "−", { canvasView.zoomBy(0.5f) }),
-            iconChip(R.drawable.ic_zoom_in, "+", { canvasView.zoomBy(2f) }),
-        )
-        val dockShell = buttonToolbar("Dock",
-            allDockButtons,
-            Gravity.BOTTOM or Gravity.CENTER,
-            snapshotter,
-            kind = FloatingPanel.Kind.DOCK,
-            dockVertical = false)
-
-        // Place all shells in the overlay. Panel groups anchor bottom/start
-        // (except Layers which is end-anchored); inline docks anchor bottom.
-        // The dock inset accounts for the bottom-anchored shells' height.
-        // (Each FloatingPanel manages its own rest position via SharedPreferences.)
-    }
-
-    /** A grouped toolbar: FloatingPanel with a header (label + chevron) and a
-     *  content area that swaps between compact buttons and the extended panel. */
-    private fun groupedToolbar(
-        key: String,
-        label: String,
-        compact: List<View>,
-        extended: View?,
-        gravity: Int,
-        snapshotter: BackdropSnapshotter,
-    ): FloatingPanel {
-        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) })
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
-        // Header row
-        val header = LinearLayout(this).apply {
+    /** Builds the strip dock + the six draggable panel shells. */
+    private fun buildToolStrip(snapshotter: BackdropSnapshotter) {
+        val density = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setGravity(Gravity.CENTER_VERTICAL)
+            gravity = Gravity.CENTER_VERTICAL
         }
-        val labelView = TextView(this).apply {
-            text = label
-            setTextColor(GlassStyle.TEXT_PRIMARY)
-            textSize = 14f
-            setAllCaps(true)
-            // Drop shadow for readability over glass
-            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-        }
-        val chevron = Button(this).apply {
-            text = "▾"
-            textSize = 12f
-            GlassStyle.button(this)
-            Springs.attachPressFeedback(this)
-        }
-        header.addView(labelView, LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(chevron, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        container.addView(header, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        // Content frame: holds compact buttons OR extended panel
-        val content = HorizontalScrollView(this).apply {
+        fun addGap() {
+            row.addView(View(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams((density * 14).toInt(), 1)
+            })
+        }
+
+        // ----- tools -----
+        stripChip(row, R.drawable.ic_brush, "Brush") { togglePanel(brushPanel) }
+        stripChip(row, R.drawable.ic_erase, "Erase") { toggleEraseOnBrush() }
+        stripChip(row, R.drawable.ic_pick, "Pick") { togglePick() }
+        stripChip(row, R.drawable.ic_select, "Select") { toggleSelect() }
+        stripChip(row, R.drawable.ic_shapes, "Shapes") { toggleShapesTool() }
+        stripChip(row, R.drawable.ic_blend, "Blend") { toggleBlendTool() }
+        addGap()
+        // ----- color + stabilizer -----
+        val swatchFrame = FrameLayout(this).apply {
+            contentDescription = "Color"
+            isClickable = true
+            isFocusable = true
+            Springs.attachPressFeedback(this)
+            setOnClickListener {
+                showColorPicker()
+                GlassStyle.selectionTap(this@MainActivity)
+            }
+        }
+        colorSwatch = View(this)
+        swatchFrame.addView(colorSwatch, FrameLayout.LayoutParams(
+            (density * 28).toInt(), (density * 28).toInt(), Gravity.CENTER))
+        row.addView(swatchFrame, LinearLayout.LayoutParams(
+            (density * 48).toInt(), (density * 48).toInt()))
+        lazyButton = stripChip(row, R.drawable.ic_lazy, "Lazy") { toggleLazy() }
+        addGap()
+        // ----- panels / content -----
+        stripChip(row, R.drawable.ic_layers, "Layers") {
+            togglePanel(layersPanel); layersPanel.refresh()
+        }
+        stripChip(row, R.drawable.ic_image, "Image") {
+            togglePanel(imagePanel)
+            imagePanel.refresh()
+            if (shellOf[imagePanel]?.isShowing == true) {
+                toast("Image panel - acts on the selected or latest image")
+            }
+        }
+        stripChip(row, R.drawable.ic_pins, "Pins") {
+            togglePanel(pinsPanel); pinsPanel.refresh()
+        }
+        stripChip(row, R.drawable.ic_import, "Import") { importLauncher.launch("image/*") }
+        addGap()
+        // ----- history / edit -----
+        undoButton = stripChip(row, R.drawable.ic_undo, "Undo") {
+            canvasView.viewModel.undo()
+            canvasView.requestSceneRepaint()
+            refreshToolbar()
+        }
+        redoButton = stripChip(row, R.drawable.ic_redo, "Redo") {
+            canvasView.viewModel.redo()
+            canvasView.requestSceneRepaint()
+            refreshToolbar()
+        }
+        stripChip(row, R.drawable.ic_delete, "Delete") {
+            if (canvasView.viewModel.document.selection.deleteSelection()) {
+                canvasView.requestSceneRepaint()
+                toast("Selection deleted (Undo restores it)")
+            }
+        }
+        stripChip(row, R.drawable.ic_clear, "Clear") { confirmClearLayer() }
+        stripChip(row, R.drawable.ic_flip, "Flip") {
+            withSelection { it.flip(true) }
+            toast("Selection flipped horizontally")
+        }
+        stripChip(row, R.drawable.ic_rot90, "Rotate") {
+            withSelection { it.rotate(15f) }
+            toast("Selection rotated +15 deg (repeat to keep turning)")
+        }
+        addGap()
+        // ----- view -----
+        stripChip(row, R.drawable.ic_zoom_out, "Zoom out") { canvasView.zoomBy(0.5f) }
+        stripChip(row, R.drawable.ic_zoom_in, "Zoom in") { canvasView.zoomBy(2f) }
+        addGap()
+        // ----- export / demo -----
+        stripChip(row, R.drawable.ic_png, "PNG") { exportPng() }
+        stripChip(row, R.drawable.ic_video, "Video") { exportVideo() }
+        stripChip(row, R.drawable.ic_demo, "Demo") { canvasView.runDemo() }
+
+        val scroll = HorizontalScrollView(this).apply {
             isHorizontalFadingEdgeEnabled = true
             isFillViewport = false
         }
-        val contentRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setGravity(Gravity.CENTER_VERTICAL)
-        }
-        content.addView(contentRow)
-        container.addView(content, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        scroll.addView(row)
+        val dock = FloatingPanel(this, "Dock",
+            { p -> snapshotter.snapshot(p) }, kind = FloatingPanel.Kind.DOCK)
+        dock.setContent(scroll)
+        overlay.setDock(dock, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
 
-        var extendedShown = false
+        // ----- the six panel shells: drag + persist + auto-hide unchanged -----
+        panelShell("BrushPanel", brushPanel, Gravity.BOTTOM or Gravity.START,
+            light = true, snapshotter = snapshotter)
+        panelShell("ShapesPanel", shapesPanel, Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        panelShell("BlendPanel", blendPanel, Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        panelShell("LayersPanel", layersPanel, Gravity.END or Gravity.CENTER_VERTICAL,
+            snapshotter = snapshotter)
+        panelShell("ImagePanel", imagePanel, Gravity.BOTTOM or Gravity.START,
+            snapshotter = snapshotter)
+        panelShell("PinsPanel", pinsPanel, Gravity.TOP or Gravity.END,
+            snapshotter = snapshotter)
+        updateStripStates()
+    }
 
-        fun showCompact() {
-            contentRow.removeAllViews()
-            for (v in compact) contentRow.addView(v)
-            chevron.text = "▾"
-            extendedShown = false
-        }
-
-        fun showExtended() {
-            contentRow.removeAllViews()
-            if (extended != null) content.addView(extended)
-            chevron.text = "▴"
-            extendedShown = true
-        }
-
-        chevron.setOnClickListener {
-            if (extendedShown) showCompact() else showExtended()
-        }
-        // Tapping the label also extends
-        labelView.setOnClickListener {
-            if (!extendedShown) showExtended()
-        }
-
-        showCompact()
-        shell.setContent(container)
-
-        // Register in shellOf so togglePanel / dismiss works
-        // (we register the panel view itself, not the shell)
-        if (extended is BrushPanel) shellOf[extended] = shell
-        if (extended is LayersPanel) shellOf[extended] = shell
-        if (extended is PinsPanel) shellOf[extended] = shell
-        if (extended is ShapesPanel) shellOf[extended] = shell
-        if (extended is BlendPanel) shellOf[extended] = shell
-        if (extended is ImagePanel) shellOf[extended] = shell
-
+    /** Wraps a panel view in a draggable FloatingPanel shell (shellOf
+     *  registration keeps togglePanel working for all six panels). */
+    private fun panelShell(
+        key: String,
+        panel: View,
+        gravity: Int,
+        light: Boolean = false,
+        snapshotter: BackdropSnapshotter,
+    ): FloatingPanel {
+        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) }, light = light)
+        shell.setContent(panel)
+        shellOf[panel] = shell
         overlay.addShell(shell, gravity,
             bottomInsetPx = if (gravity and Gravity.BOTTOM != 0) {
                 (resources.displayMetrics.density * 14).toInt()
             } else 0)
-
         return shell
     }
 
-    /** A simple inline button toolbar (no panel): a FloatingPanel with a row of chips. */
-    private fun buttonToolbar(
-        key: String,
-        buttons: List<View>,
-        gravity: Int,
-        snapshotter: BackdropSnapshotter,
-        kind: FloatingPanel.Kind = FloatingPanel.Kind.PANEL,
-        dockVertical: Boolean = false,
-    ): FloatingPanel {
-        val shell = FloatingPanel(this, key, { p -> snapshotter.snapshot(p) }, kind = kind)
+    /**
+     * One icon chip: 48dp touch target, 24dp line icon, amber underline
+     * dot for the ACTIVE state. [desc] is the legacy text label, kept as
+     * contentDescription so TalkBack and dump-based tests keep matching.
+     */
+    private fun stripChip(
+        row: LinearLayout, iconRes: Int, desc: String, onClick: () -> Unit,
+    ): ImageButton {
         val density = resources.displayMetrics.density
-
-        if (dockVertical) {
-            // Vertical layout: buttons stack vertically, scrollable
-            val scroll = ScrollView(this).apply {
-                isFillViewport = false
-            }
-            val container = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setGravity(Gravity.CENTER_HORIZONTAL)
-            }
-            scroll.addView(container)
-            for (v in buttons) container.addView(v)
-            shell.setContent(scroll)
-        } else {
-            // Horizontal layout: buttons in a row, scrollable horizontally
-            val scroll = HorizontalScrollView(this).apply {
-                isHorizontalFadingEdgeEnabled = true
-                isFillViewport = false
-            }
-            val container = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setGravity(Gravity.CENTER_VERTICAL)
-            }
-            scroll.addView(container)
-            for (v in buttons) container.addView(v)
-            shell.setContent(scroll)
-        }
-        overlay.addShell(shell, gravity,
-            bottomInsetPx = if (gravity and Gravity.BOTTOM != 0) {
-                // Extra bottom margin so docks don't collide with screen edge
-                // and have breathing room between left and right docks.
-                (density * 18).toInt()
-            } else 0)
-        return shell
-    }
-
-    /** An icon chip for grouped toolbars: vector icon on top, readable label below. */
-    private fun iconChip(iconRes: Int, label: String, onClick: () -> Unit): LinearLayout {
-        val density = resources.displayMetrics.density
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-        }
-        val icon = ImageButton(this).also {
-            it.setImageResource(iconRes)
-            GlassStyle.iconButton(it)
-            Springs.attachPressFeedback(it)
-            it.setOnTouchListener { _, event ->
+        val chip = FrameLayout(this)
+        val icon = ImageButton(this).apply {
+            setImageResource(iconRes)
+            contentDescription = desc
+            GlassStyle.iconButton(this)
+            Springs.attachPressFeedback(this)
+            setPadding(0, 0, 0, (density * 5).toInt())
+            setOnTouchListener { _, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        GlassStyle.pressTap(this@MainActivity)
-                        it.setColorFilter(Brand.BLUE)
-                        false
+                        if (isEnabled) GlassStyle.pressTap(this@MainActivity)
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        it.setColorFilter(GlassStyle.TEXT_PRIMARY)
-                        false
-                    }
-                    else -> false
                 }
+                false
             }
-            it.setOnClickListener { onClick(); GlassStyle.selectionTap(this@MainActivity) }
-            val size = (density * 24).toInt()
-            it.layoutParams = LinearLayout.LayoutParams(size, size)
-            it.setPadding(0, 0, 0, (density * 2).toInt())
+            setOnClickListener {
+                onClick()
+                GlassStyle.selectionTap(this@MainActivity)
+                updateStripStates()
+            }
         }
-        row.addView(icon)
-        val text = TextView(this).apply {
-            text = label
-            textSize = 10f
-            setTextColor(GlassStyle.TEXT_PRIMARY)
-            setAllCaps(true)
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+        chip.addView(icon, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        val dot = View(this).apply {
+            background = GradientDrawable().apply {
+                setColor(GlassStyle.ACCENT)
+                cornerRadius = 2f * density
+            }
+            visibility = View.INVISIBLE
         }
-        // Give the text enough width to show most of the label before truncating
-        text.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { width = (density * 64).toInt() }
-        row.addView(text)
-        return row
+        chip.addView(dot, FrameLayout.LayoutParams(
+            (density * 4).toInt(), (density * 4).toInt(),
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = (density * 2).toInt()
+        })
+        row.addView(chip, LinearLayout.LayoutParams(
+            (density * 48).toInt(), (density * 48).toInt()))
+        stripChips[desc] = icon
+        stripDots[desc] = dot
+        return icon
+    }
+
+    /** Recomputes the strip visuals: amber tint + dot for the active tool,
+     *  dimming for disabled actions (undo/redo). */
+    private fun updateStripStates() {
+        if (stripChips.isEmpty()) return
+        val vm = canvasView.viewModel
+        val tool = canvasView.tool
+        val active = mapOf(
+            "Brush" to (tool == ZoomableCanvasView.Tool.DRAW && !vm.eraseOnCurrentBrush),
+            "Erase" to vm.eraseOnCurrentBrush,
+            "Pick" to (tool == ZoomableCanvasView.Tool.EYEDROPPER),
+            "Select" to (tool == ZoomableCanvasView.Tool.SELECT),
+            "Shapes" to (tool == ZoomableCanvasView.Tool.SHAPE),
+            "Blend" to (tool == ZoomableCanvasView.Tool.SMUDGE),
+            "Lazy" to vm.lazyEnabled,
+        )
+        for ((desc, icon) in stripChips) {
+            val on = active[desc] == true
+            icon.setColorFilter(if (on) GlassStyle.ACCENT else GlassStyle.TEXT_PRIMARY)
+            icon.alpha = if (icon.isEnabled) 1f else 0.35f
+            stripDots[desc]?.visibility = if (on) View.VISIBLE else View.INVISIBLE
+        }
+    }
+
+    /** v0.7.0: the eyedropper is a first-class strip tool again (pen tap
+     *  samples + auto-returns to drawing — see ZoomableCanvasView). */
+    private fun togglePick() {
+        canvasView.tool =
+            if (canvasView.tool == ZoomableCanvasView.Tool.EYEDROPPER)
+                ZoomableCanvasView.Tool.DRAW
+            else ZoomableCanvasView.Tool.EYEDROPPER
+        toast(
+            if (canvasView.tool == ZoomableCanvasView.Tool.EYEDROPPER)
+                "Eyedropper ON - tap with the pen to sample a color"
+            else "Back to drawing"
+        )
     }
 
     private fun togglePanel(panel: View) {
@@ -636,7 +558,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSwatch() {
         if (::colorSwatch.isInitialized) {
-            colorSwatch.setBackgroundColor(canvasView.viewModel.currentBrush.color)
+            colorSwatch.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(canvasView.viewModel.currentBrush.color)
+                setStroke(maxOf(1, (resources.displayMetrics.density).toInt()),
+                    GlassStyle.BORDER)
+            }
         }
     }
 
@@ -799,10 +726,7 @@ class MainActivity : AppCompatActivity() {
             undoButton.isEnabled = doc.canUndo
             redoButton.isEnabled = doc.canRedo
         }
-        if (::lazyButton.isInitialized) {
-            // P4.4: the Lazy section button mirrors the stabilizer state
-            lazyButton.text = if (canvasView.viewModel.lazyEnabled) "Lazy ON" else "Lazy"
-        }
+        updateStripStates()
         if (::layersPanel.isInitialized) layersPanel.refresh()
         if (::pinsPanel.isInitialized) pinsPanel.refresh()
         if (::imagePanel.isInitialized) imagePanel.refresh()

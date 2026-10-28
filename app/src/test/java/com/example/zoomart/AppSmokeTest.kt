@@ -1,6 +1,7 @@
 package com.example.zoomart
 
 import android.annotation.SuppressLint
+import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
@@ -11,8 +12,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import java.io.File
+import java.time.Duration
 
 /**
  * Headless smoke test: boots the real activity, dispatches real touch
@@ -99,11 +102,14 @@ class AppSmokeTest {
         finger(view, MotionEvent.ACTION_UP, 105f, 103f, t + 376)
         assertEquals("finger double-tap must not pin", 0, vm.document.bookmarks.size)
 
-        // --- 5. STYLUS double-tap drops a pin; taps never commit strokes ---
+        // --- 5. STYLUS long-press drops a pin; quick taps never commit strokes ---
+        // quick tap: down, up immediately — no pin, no stroke (degenerate rejected)
         stylus(view, MotionEvent.ACTION_DOWN, 100f, 100f, t + 500)
         stylus(view, MotionEvent.ACTION_UP, 100f, 100f, t + 516)
+        // long press: down, hold 500ms, up — pin placed, no stroke committed
         stylus(view, MotionEvent.ACTION_DOWN, 105f, 103f, t + 560)
-        stylus(view, MotionEvent.ACTION_UP, 105f, 103f, t + 576)
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        stylus(view, MotionEvent.ACTION_UP, 105f, 103f, t + 1060)
         assertEquals(1, vm.document.bookmarks.size)
         assertEquals("taps must never commit strokes", 1, vm.document.activeLayer.strokes.size)
 

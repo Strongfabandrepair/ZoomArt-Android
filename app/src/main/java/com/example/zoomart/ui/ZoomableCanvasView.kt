@@ -19,6 +19,7 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Build
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.Log
 import android.view.GestureDetector
@@ -371,14 +372,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                // P1.1: only the PEN drops bookmark pins (finger = pan/zoom).
-                if (!isPenEvent(e)) return false
-                val cam = viewModel.camera
-                val label = "Pin " + (viewModel.document.bookmarks.size + 1)
-                viewModel.addBookmark(cam.screenToLocalX(e.x), cam.screenToLocalY(e.y), label)
-                onStateChanged?.invoke()
-                invalidate()
-                return true
+                // Pins now use long-press, not double-tap, which was too sensitive
+                // and fired during normal drawing.
+                return false
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
@@ -627,6 +623,14 @@ class ZoomableCanvasView @JvmOverloads constructor(
                         event.getToolType(0), uv[0], uv[1],
                         pressure01(event.pressure),
                     )
+                    // Long-press to drop a pin (replaces the too-sensitive double-tap).
+                    // Armed only when a pen gesture started; cancelled on move/lift.
+                    if (penGesture && gestureTool != Tool.EYEDROPPER) {
+                        lastPinScreenX = event.x
+                        lastPinScreenY = event.y
+                        pinDownTime = SystemClock.uptimeMillis()
+                        pinPending = true
+                    }
                 } else {
                     fingerPanning = true
                     lastFingerX = event.x
@@ -666,6 +670,14 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
+                // a moving pen is drawing, not holding for a pin — cancel pending pin
+                if (pinPending && isPenEvent(event)) {
+                    val dx = abs(event.x - lastPinScreenX)
+                    val dy = abs(event.y - lastPinScreenY)
+                    if (kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat() > pinMoveThresholdDp * resources.displayMetrics.density) {
+                        pinPending = false
+                    }
+                }
                 if (isDrawing && penGesture) {
                     when (gestureTool) {
                         Tool.DRAW -> {
@@ -796,6 +808,13 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 if (ignoredPalmIds.remove(event.getPointerId(idx))) {
                     return true // ignored palm finger lifted; the pen keeps working
                 }
+                // a lifted pen cancels any pending pin drop / drops a pin if held long enough
+                if (pinPending && isPenEvent(event, idx)) {
+                    if (SystemClock.uptimeMillis() - pinDownTime >= pinLongPressDelay) {
+                        placePinAtLastPin()
+                    }
+                    pinPending = false
+                }
                 if (isDrawing && penGesture && isPenEvent(event, idx)) {
                     // pen lifted while fingers remain: finish, fingers go inert
                     finishPenGesture()
@@ -829,6 +848,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 fingerPanning = false
                 penGesture = false
                 ignoredPalmIds.clear()
+                // Long-press pin: if the pen was held long enough, drop a pin on release.
+                if (pinPending) placePinAtLastPin()
+                pinPending = false
                 tapDetector.onTouchEvent(event)
                 scaleDetector.onTouchEvent(event)
             }
@@ -859,6 +881,18 @@ class ZoomableCanvasView @JvmOverloads constructor(
     }
 
     private fun pressure01(raw: Float): Float = raw.coerceIn(0f, 1f)
+
+    /** Delay before a held pen becomes a pin instead of drawing (standard long-press timeout). */
+    private val pinLongPressDelay: Long = 500L
+    /** Movement threshold (dp) beyond which a held pen is treated as a drag, not a hold. */
+    private val pinMoveThresholdDp: Float = 8f
+    /** Set while a pen is held without moving, awaiting the pin-drop timeout. */
+    private var pinPending = false
+    /** Time (system uptime ms) when the pen went down, for long-press pin detection. */
+    private var pinDownTime: Long = 0
+    /** Raw screen coords of the pen down that may become a pin. */
+    private var lastPinScreenX = 0f
+    private var lastPinScreenY = 0f
 
     /** Undoes the canvas's on-screen rotation ([canvasRotationDegrees]) for a
      *  raw SCREEN point, about the same center pivot [onDraw] rotates
@@ -988,6 +1022,30 @@ class ZoomableCanvasView @JvmOverloads constructor(
         canvas.drawCircle(brushX, brushY, 6f, lazyDotPaint)
         val r = viewModel.lazyBrush.radiusScreen
         if (r > 2f) canvas.drawCircle(brushX, brushY, r, lazyPaint)
+    }
+
+    /**
+     * Drops a bookmark pin at the held pen position, un-rotating for canvas
+     * rotation so the pin lands under the stylus tip. A long press is a pin
+     * drop, not a draw — any in-progress stroke is discarded.
+     */
+    private fun placePinAtLastPin() {
+        pinPending = false
+        // Only place a pin if the pen was held long enough; a quick tap is not a pin.
+        if (SystemClock.uptimeMillis() - pinDownTime < pinLongPressDelay) return
+        // A long press is a pin drop, not a draw — discard any in-progress stroke.
+        if (isDrawing && penGesture) {
+            viewModel.inProgress = null
+            isDrawing = false
+        }
+        penGesture = false
+        fingerPanning = false
+        val cam = viewModel.camera
+        val uv = unrotateScreen(lastPinScreenX, lastPinScreenY)
+        val label = "Pin " + (viewModel.document.bookmarks.size + 1)
+        viewModel.addBookmark(cam.screenToLocalX(uv[0]), cam.screenToLocalY(uv[1]), label)
+        onStateChanged?.invoke()
+        invalidate()
     }
 
     /**

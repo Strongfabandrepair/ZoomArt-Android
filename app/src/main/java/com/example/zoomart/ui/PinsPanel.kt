@@ -25,7 +25,7 @@ class PinsPanel(
         val pad = (resources.displayMetrics.density * 10).toInt()
         setPadding(pad, pad, pad, pad)
         addView(TextView(context).apply {
-            text = "Pins (double-tap canvas to add)"
+            text = "Pins (long-press canvas to add)"
             setTextColor(GlassStyle.TEXT_SECONDARY)
         }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
         addView(listContainer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))

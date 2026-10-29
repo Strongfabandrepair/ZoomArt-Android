@@ -1408,7 +1408,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
         // smoother without mutating the committed points (see drawScene).
         val pts = ptsOverride ?: stroke.points
         if (pts.isEmpty()) return
-        if (pts.size == 1) {
+        if (pts.size == 1 && (brush.spacingWorld <= 0f || brush.stampShape == com.example.zoomart.model.StampShape.ROUND)) {
             strokeFillPaint.pathEffect = null
             strokeFillPaint.color = brush.color
             strokeFillPaint.alpha =
@@ -1447,7 +1447,31 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 val size = (0.6f + rnd.nextFloat() * 0.8f) * r
                 val alpha = (0.5f + rnd.nextFloat() * 0.5f).coerceIn(0f, 1f)
                 strokeFillPaint.alpha = ((strokeFillPaint.alpha / 255f) * alpha * 255f).toInt().coerceIn(0, 255)
-                canvas.drawCircle(x + ox, y + oy, size.coerceAtLeast(1f), strokeFillPaint)
+                val rStamp = size.coerceAtLeast(1f)
+                canvas.save()
+                canvas.translate(x + ox, y + oy)
+                canvas.rotate(brush.angleDeg)
+                when (brush.stampShape) {
+                    com.example.zoomart.model.StampShape.ROUND -> canvas.drawCircle(0f,0f,rStamp,strokeFillPaint)
+                    com.example.zoomart.model.StampShape.CHISEL -> canvas.drawRect(-rStamp,-rStamp*0.25f,rStamp,rStamp*0.25f,strokeFillPaint)
+                    com.example.zoomart.model.StampShape.LEAF -> {
+                        scratchPath.reset(); scratchPath.moveTo(-rStamp,0f)
+                        scratchPath.cubicTo(-rStamp*0.3f,-rStamp,rStamp*0.6f,-rStamp*0.7f,rStamp,0f)
+                        scratchPath.cubicTo(rStamp*0.3f,rStamp,-rStamp*0.6f,rStamp*0.7f,-rStamp,0f)
+                        scratchPath.close(); canvas.drawPath(scratchPath,strokeFillPaint)
+                    }
+                    com.example.zoomart.model.StampShape.STAR -> {
+                        scratchPath.reset()
+                        for (point in 0 until 10) {
+                            val a = point * Math.PI / 5.0 - Math.PI / 2.0
+                            val r = rStamp * if (point % 2 == 0) 1f else 0.4f
+                            val sx=(kotlin.math.cos(a)*r).toFloat(); val sy=(kotlin.math.sin(a)*r).toFloat()
+                            if (point==0) scratchPath.moveTo(sx,sy) else scratchPath.lineTo(sx,sy)
+                        }
+                        scratchPath.close(); canvas.drawPath(scratchPath,strokeFillPaint)
+                    }
+                }
+                canvas.restore()
             }
             stamp(pts[0].x, pts[0].y,
                 brush.widthForPressure(pts[0].pressure01) * 0.5f, pts[0].pressure01)

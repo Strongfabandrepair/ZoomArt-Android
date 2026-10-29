@@ -110,4 +110,25 @@ class RenderingRegressionTest {
         assertTrue(Color.alpha(bitmap.getPixel(64,64)) > 0)
         bitmap.recycle()
     }
+    @Test fun specialtyStampsKeepTheirShapeThroughSaveAndReopen() {
+        val renderedShapes=mutableSetOf<Int>()
+        for (shape in StampShape.values()) {
+            val v=view()
+            val stroke=StrokeData(BrushSpec(baseWidthWorld=24f,spacingWorld=28f,stampShape=shape)).apply {
+                addPoint(StrokePoint(24f,64f,1f)); addPoint(StrokePoint(104f,64f,1f))
+            }
+            v.viewModel.document.commitStroke(stroke)
+            val restored=DocumentCodec.fromJson(DocumentCodec.toJson(v.viewModel.document,v.viewModel.camera))
+            val copy=restored.document.activeLayer.strokes.single()
+            assertEquals(shape,copy.brush.stampShape)
+            val a=Bitmap.createBitmap(128,128,Bitmap.Config.ARGB_8888)
+            val b=Bitmap.createBitmap(128,128,Bitmap.Config.ARGB_8888)
+            v.drawStroke(Canvas(a),stroke,1f); v.drawStroke(Canvas(b),copy,1f)
+            assertTrue(a.sameAs(b))
+            val pixels=IntArray(128*128); a.getPixels(pixels,0,128,0,0,128,128)
+            assertTrue("Each stamp needs a distinct silhouette",renderedShapes.add(pixels.contentHashCode()))
+            assertTrue(Color.alpha(a.getPixel(24,64))>0)
+            a.recycle(); b.recycle()
+        }
+    }
 }

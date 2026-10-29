@@ -17,7 +17,9 @@ This is a development build, currently **0.7.0**, for **Android 8.0+ (API 26)**,
 ## What is implemented
 
 - Pressure-sensitive stylus drawing, optional finger drawing, pan/pinch navigation and cancellation rollback.
-- Brush Atelier with live ink trials, replay, custom presets, spacing/scatter, dashes, pressure and stabilization controls.
+- Brush Atelier with 24 built-in brushes, a labeled picker, live ink trials, Clear/Replay, personal presets and pressure/stabilization controls. Specialty stamps include stars, leaves and chisels; textures include charcoal grain, pastel dust and ink spatter.
+- Floating panels close immediately on stylus contact and stay closed until reopened. The dock retains its separate automatic hide/restore behavior.
+- Offline User Guide on the title screen, with Topics navigation and instructions bundled from this repository.
 - Layers, shape tools, image tracing, selections, swept vector erasing, bookmark flights and undo/redo.
 - Background session serialization and atomic replacement, named project checkpoints, recoverable trash and portable `.zoomart` archives with image assets.
 - PNG export of the current view or entire drawing, plus MP4 bookmark tours.
@@ -52,7 +54,9 @@ The full device suite includes an isolated drawing frame profile. For functional
 
 ## Verification and limits
 
-The branding snapshot passed **255 local tests** and **eight tablet instrumentation tests** on a **Galaxy Tab S9 FE / Android 16**. Debug/release builds and lint complete with zero errors (98/100 lint warnings remain). The updated title and launcher were visually checked on the tablet. A locally test-signed optimized APK was smoke-tested during the preceding release-hardening pass. Production signing and remote CI execution are not established.
+The current specialty-brush snapshot passed **259 local tests**, debug/release APK assembly and debug lint with zero errors. Tablet checks on the **Galaxy Tab S9 FE / Android 16** covered permanent stylus dismissal, the brush picker and Star chain preview. Regression tests cover distinct stamp silhouettes and saved-project rendering. The final app is installed on the tablet.
+
+Earlier branding verification included eight tablet instrumentation tests and release-bundle/release-lint checks; those results belong to that earlier snapshot. Production signing and remote CI execution remain unverified.
 
 Dense drawings remain a performance concern: a 10,000-stroke workload improved substantially but still measured roughly 114–150 ms median frame duration in earlier device runs. Full localization, accessibility auditing, actual split-screen/phone coverage, process-death durability and resumable archive operations remain unfinished. See the release-readiness report for details rather than treating passing tests as release certification.
 

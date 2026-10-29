@@ -1,5 +1,7 @@
 # ZoomArt-Android — UI/UX Responsiveness & Branding Plan (v0.7.0 Phase 5)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 ## Source of truth / brief
 
 User wants the v0.7.0 UI evolved to:

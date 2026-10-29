@@ -1,5 +1,15 @@
 # ZoomArt-Android — Progress Log
 
+## Current checkpoint — 29 October 2026
+
+- App version 0.7.0 development; minimum API 26, compile/target API 36; JDK 17, Gradle 8.11.1 and AGP 8.9.2.
+- Specialty brushes: 24 built-in presets, quick labeled picker, star/leaf/chisel stamp geometry, document/personal-preset persistence and renderer-backed previews.
+- Stylus contact closes floating panels immediately; delayed idle restoration cannot reopen them. The dock restores independently.
+- Offline title-screen User Guide now covers the complete collection and current panel workflow.
+- Verification: 259 local tests, debug/release APK assembly and debug lint passed. Installed on Galaxy Tab S9 FE / Android 16; tablet checks covered panel dismissal, picker and Star chain preview.
+- Release gates remain in [release hardening](docs/RELEASE_HARDENING.md). All records below predate this checkpoint; their old toolchains, test counts and plans are historical.
+
+
 Persistent project-state file. Add one checkpoint row per bug fix, fix, or new feature that lands; keep it in sync with code changes. This file lives at the repo root and travels with every commit.
 
 ---

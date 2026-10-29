@@ -1,5 +1,7 @@
 # P2 — Layers v2 (implementation notes)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 Implements the LAYERS section of `docs/REVIEW_2026-10-18.md` on top of the
 P0 nested-zoom-level architecture and P1 spec fixes. All work test-first;
 the suite grew 78 → 109 (0 failures).

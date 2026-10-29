@@ -172,7 +172,7 @@ class MainActivity : AppCompatActivity() {
         updateSwatch()
         overlay.autoHideEnabled = AppSettings.getAutoHide(this)
 
-        canvasView.onStylusContact = { shellOf.values.forEach { it.dismiss() } }
+        canvasView.onStylusContact = { shellOf.values.forEach { it.dismissImmediately() } }
         canvasView.onStateChanged = { refreshToolbar() }
         canvasView.onEyedrop = { color ->
             canvasView.viewModel.currentBrush =

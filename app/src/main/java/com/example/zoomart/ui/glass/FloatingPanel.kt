@@ -91,6 +91,7 @@ class FloatingPanel(
     private var lastRawX = 0f
     private var lastRawY = 0f
     private var autoHidden = false
+    private var explicitlyDismissed = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     /** Springs we may need to cancel (per property). */
@@ -214,6 +215,7 @@ class FloatingPanel(
 
     /** Spring entrance: alpha 0->1, scale 0.9->1; snapshots the backdrop. */
     fun show() {
+        explicitlyDismissed = false
         if (!Springs.enabled()) {
             springs.values.toList().forEach { it.cancel() }; springs.clear()
             visibility = VISIBLE; alpha = 1f; scaleX = 1f; scaleY = 1f
@@ -238,6 +240,7 @@ class FloatingPanel(
 
     /** Spring exit; GONE once the fade settles. */
     fun dismiss() {
+        explicitlyDismissed = true
         if (!Springs.enabled()) {
             springs.values.toList().forEach { it.cancel() }; springs.clear()
             visibility = GONE; autoHidden = false; return
@@ -256,6 +259,15 @@ class FloatingPanel(
         }
     }
 
+    /** Pen contact closes immediately and cannot be undone by the idle restore timer. */
+    fun dismissImmediately() {
+        explicitlyDismissed = true
+        autoHidden = false
+        springs.values.toList().forEach { it.cancel() }; springs.clear()
+        visibility = GONE
+        translationX = 0f; translationY = 0f
+    }
+
     /** True while the auto-hide pipeline has this shell faded out. */
     val fadedForAutoHide: Boolean get() = autoHidden
 
@@ -266,6 +278,7 @@ class FloatingPanel(
      * pen strokes pass through to the canvas over the dock's area.
      */
     fun setAutoHidden(hidden: Boolean) {
+        if (explicitlyDismissed) return
         if (hidden == autoHidden) return
         autoHidden = hidden
         if (hidden) {

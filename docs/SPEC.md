@@ -1,5 +1,7 @@
 # Project Specification: Android Vector Drawing Canvas Clone (ZoomArt)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 ## 1. Goal & Vision
 To build a high-fidelity, performance-optimized, and feature-rich Android drawing application clone of Infinitefy OU's Endless Zoom Canvas - ZoomArt. The core technical challenge is managing an infinite canvas surface that maintains perfect vector quality at arbitrary zoom levels, while supporting complex brush customization and layer management.
 

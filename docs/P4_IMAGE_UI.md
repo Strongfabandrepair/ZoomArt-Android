@@ -1,5 +1,7 @@
 # P4 — Image v2 + UI (implementation notes)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 The FINAL phase of the refactor program: implements the IMAGE IMPORT &
 TRACING and UI sections of `docs/REVIEW_2026-10-18.md` plus the
 three-times-deferred cross-level eraser carryover. All work test-first;

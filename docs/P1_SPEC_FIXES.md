@@ -1,5 +1,7 @@
 # P1 — Spec-Correctness Fixes (implementation notes)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 Implements the CONFLICT/PARTIAL items of `docs/REVIEW_2026-10-18.md` on
 top of the P0 nested-zoom-level architecture (`docs/P0_ZOOM_LEVELS.md`).
 All work is test-first; the suite grew 63 → 78 (0 failures).

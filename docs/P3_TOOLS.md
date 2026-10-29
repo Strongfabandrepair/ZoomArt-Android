@@ -1,5 +1,7 @@
 # P3 — New Tools: Shapes, Lazy Brush, Blend/Smudge (implementation notes)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 Implements the three MISSING tool families of
 `docs/REVIEW_2026-10-18.md` (SHAPES / LAZY BRUSH / BLEND+SMUDGE sections)
 on top of P0 (nested zoom levels), P1 (pen routing + screen-relative

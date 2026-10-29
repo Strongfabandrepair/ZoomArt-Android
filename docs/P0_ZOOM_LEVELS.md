@@ -1,5 +1,7 @@
 # P0 Architecture — Nested Zoom Levels (implementation spec)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 Goal: TRUE infinite zoom. 30+ levels, no float jitter, zoom-out shows earlier
 levels intact. Replaces the single-world-space Camera model.
 

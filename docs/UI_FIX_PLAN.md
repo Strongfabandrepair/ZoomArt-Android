@@ -1,5 +1,7 @@
 # ZoomArt-Android — UI Fix Plan (Post-Device Testing)
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 ## Issues Found on Device (Note 8, 1440x2960 portrait)
 
 ### 1. Docks overlap in screen middle

@@ -42,3 +42,7 @@ Keep the application ID and display name stable. Updating these assets does not 
 Use the system sans-serif family: bold for the product name, medium for section labels, regular for explanatory text. Use sentence case in controls. The title, Settings and library share the animated orbital backdrop. Dock and panel shells use quieter variants, with a pale treatment for the Atelier; dialogs share the static gradient.
 
 Decorative motion pauses during drawing, while hidden/unfocused, when system animations are disabled and in Battery Saver. It must not become part of exported artwork. The current ambient animation is deliberately capped below full display refresh; do not advertise it as a 90/120 fps renderer. See [theme implementation](STUDIO_THEME.md) for lifecycle and performance details.
+
+## Guide and specialty-brush presentation
+
+The title screen includes an open-book User Guide icon in the same rounded vector style. The offline guide uses native selectable text and a Topics picker. Brush cards and Ink Lab display actual rendered marks, including star, leaf and chisel stamps; a decorative icon must not substitute for a brush preview. The expanded shelf contains 24 presets and a labeled Find a brush entry. Keep labels readable on both the pale shelf and native selection dialog. Pen dismissal is immediate and permanent until reopening; the dock retains its separate idle restoration.

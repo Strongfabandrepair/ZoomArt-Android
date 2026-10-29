@@ -94,6 +94,7 @@ object DocumentCodec {
                 append(",\"opacity\":").append(stroke.brush.opacity)
                 append(",\"pOpacity\":").append(stroke.brush.pressureOpacity)
                 append(",\"minOp\":").append(stroke.brush.minOpacity)
+                append(",\"stampShape\":\"").append(stroke.brush.stampShape.name).append("\"")
                 if (stroke.brush.angleDeg != 0f) append(",\"angle\":").append(stroke.brush.angleDeg)
                 if (stroke.brush.dashOn != 0f) append(",\"dashOn\":").append(stroke.brush.dashOn)
                 if (stroke.brush.dashOff != 0f) append(",\"dashOff\":").append(stroke.brush.dashOff)
@@ -263,6 +264,7 @@ object DocumentCodec {
                     erase = bm?.get("erase") as? Boolean ?: false,
                     // P1.2 fields; absent in older files -> plain opacity brushes
                     pressureOpacity = bm?.get("pOpacity") as? Boolean ?: false,
+                    stampShape = StampShape.values().firstOrNull { it.name == bm?.get("stampShape") } ?: StampShape.ROUND,
                     minOpacity = (bm?.get("minOp") as? Double ?: BrushSpec.DEFAULT_MIN_OPACITY.toDouble()).toFloat(),
                 )
                 val stroke = StrokeData(brush = brush)

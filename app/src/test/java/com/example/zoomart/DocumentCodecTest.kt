@@ -129,7 +129,7 @@ class DocumentCodecTest {
     fun brushPresetsAreSane() {
         for ((name, preset) in BrushPresets.all) {
             assertTrue(name + " width must be positive", preset.baseWidthWorld > 0f)
-            assertTrue(name + " response must be positive", preset.pressureResponse > 0f)
+            assertTrue(name + " response must be non-negative (zero ignores pressure)", preset.pressureResponse >= 0f)
             assertTrue(name + " must have full alpha", (preset.color ushr 24) == 0xFF)
         }
     }

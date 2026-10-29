@@ -1,38 +1,31 @@
-# Brush Atelier implementation — 29 October 2026
+# Brush Atelier — current implementation
 
-This iteration adds a more expressive drawing workspace and addresses several remaining canvas defects. It builds on the [earlier review](REVIEW_2026-10-29.md); it does not complete every release priority in that report.
+## Controls and collection
 
-## Artist-facing changes
+The Atelier combines a pale orbital panel, a real-renderer Ink Lab, a horizontal visual shelf and **Find a brush**, a labeled picker. There are **24 built-in brushes** and up to **32 device-local personal presets**. See the [user guide](USER_GUIDE.md) for the complete collection and usage instructions.
 
-- **Brush Atelier:** plum-gradient heading, warm paper test pad, dotted guides and a horizontal brush shelf. The welcome screen uses original vector ribbons over a midnight/plum/teal background; it has no continuous animation loop.
-- **Real previews:** both preset cards and the live test pad use the canvas's actual stroke renderer. The pad accepts finger or stylus input without touching the artwork. Replay draws the pressure sample through a short reveal animation.
-- **Fine tuning:** size (1–80 px), opacity, pressure response, minimum width, nib angle, stamp spacing, scatter, dash length/gap, pressure-driven opacity and its minimum, eraser size and stabilizer controls. Dash and stamp modes are mutually exclusive. Sliders show values and use 48 dp control heights.
-- **Personal brushes:** save up to 32 named presets on the device; an existing name replaces that preset. Hold a saved card to remove it after confirmation. Geometry/pressure settings survive recreation. Presets preserve the artist's current ink color and leave erase mode.
-- **Motion and touch:** interruptible press/selection springs, expandable fine controls, preview replay and welcome/canvas fades. Slider release uses a light tick; successful tool selection uses contextual feedback. System haptic preferences are respected. Shared animations and floating-panel visibility support disabled system animations. There is no claim that every existing animation in the app has been migrated.
+Ink Lab accepts finger or stylus input without editing the artwork. **Clear** empties it; **Replay** animates a generated pressure sample. Fine tuning includes size, opacity, pressure response, minimum width, nib angle, spacing/scatter, dash length/gap, pressure opacity, eraser size and stabilization. Stamp spacing and dashes are mutually exclusive. Zero pressure response intentionally ignores pressure for width. Personal presets preserve the current ink color when selected and exit erase mode.
 
-## Correctness and brush rendering
+The stabilizer uses the same rope model in the pad and canvas: the brush stays within the configured screen-space radius behind the pointer. Live strokes are smoothed; completed stabilized strokes receive smoothing and taper. Cancelling a preview gesture restores the previous preview. Selecting Lazy from the dock is reflected when reopening the Atelier.
 
-- Stamp spacing now continues across input segments instead of restarting at each point. Dense pencil/spray input no longer silently skips stamps because individual segments are shorter than the spacing. Jitter uses a stable seed, so adding samples does not randomly rearrange all earlier particles.
-- Translucent stroke caps are merged into the outline before painting, removing darker overlap spots. The merged outline is cached with the existing geometry revision.
-- The eraser clips segments against the swept path, including intersections where no sampled point is nearby. New boundaries interpolate pressure and retain the source level/brush/taper metadata. No-hit strokes retain identity; endpoint-only trims are applied even when the point count stays the same. Only the newest sweep is processed at each input event.
-- Eraser clipping uses a conservative segment envelope based on maximum endpoint width. This can remove slightly more ink along strongly varying-width segments. Exact outline subtraction and independent treatment of newly cut taper endpoints remain future work.
-- Camera transforms now find a shared ancestor and support sibling coordinate frames without routing through root coordinates. A regression covers siblings below 180 nested levels. Interactive level visibility and bookmark flight interpolation are unchanged; this is not a complete deep-navigation rewrite.
+## Specialty rendering and persistence
 
-## Verification
+The original nine presets retain their indices so saved default-brush preferences remain valid. Fifteen appended presets add technical/expressive ink, broad nib lettering, procedural grain and dust, spatter, stipple, stitch and decorative marks. The renderer supports ROUND, STAR, LEAF and CHISEL stamp silhouettes. Preview, artwork and exports share this renderer and deterministic stamp placement.
 
-- Debug app, test APK, unit/native-render tests and lint build passed.
-- **241 local tests passed**; zero failed, errored or skipped.
-- **7 Galaxy Tab S9 FE smoke tests passed**, including input routing, gallery PNG, hardware video and session restoration.
-- **Zero lint errors; 69 warnings remain.** Localization, programmatic view constructors and existing performance/accessibility warnings still need triage.
-- Final tablet software-render probe (1,000 strokes / 40,000 points): cold **257.85 ms**, warm median **15.15 ms**, warm p95 **15.82 ms** over 20 samples. Merging outlines adds preparation cost while reducing repeated drawing work. These are single-run software-Canvas timings, not measured interactive frame pacing; cold-frame work still needs optimization.
-- New regression coverage includes swept eraser intersections, pressure interpolation, no-hit identity, endpoint trimming and undo, deep sibling transforms, stamp sampling density, cap opacity, custom-preset recreation and color/nib preservation during editing.
-- On-device visual inspection covered the welcome screen, brush shelf, actual scratch-pad drawing, replay and scrolling to fine controls. Existing artwork was retained. Synthetic tests and screenshots do not establish physical S Pen latency, haptic quality or smooth frame pacing under heavy workloads.
-- Local evidence: `cache_devicetest/review_2026_10_29/atelier_*`. It remains ignored by Git because this directory includes private artwork and backups.
+`BrushSpec.stampShape` is serialized in document JSON and personal presets. Missing or unrecognized values fall back to ROUND. Portable archives use the document codec and retain the new field. Older app versions may ignore it and display round stamps. Shapes are procedural vector marks; there is no wet-media simulation or multicolor paint mixing.
 
-## Still required before release
+Calligraphy outlines omit circular endpoint caps; a single angled-nib contact uses a narrow rectangular mark. Ordinary translucent round caps are merged into the outline to avoid darker overlaps. Existing swept eraser clipping, local-level transforms and bounded outline caching remain in place.
 
-Background transactional saving; a recoverable project library and portable archives; deeper document validation; bookmark-flight precision and complete gesture cancellation; performance profiling on real drawing workloads; accessibility/localization; phone/split-screen coverage; current target SDK and a tested release pipeline. The dock and other panels also need the same contextual design treatment as the Atelier.
+## Panel lifecycle
 
-## Implementation references
+Stylus or stylus-eraser contact on the canvas immediately dismisses all floating tool shells, including contact after a finger. Dismissal cancels springs, marks the shell explicitly closed and removes it from interaction. The auto-hide idle timer cannot restore it. Only explicit reopening clears that state. The dock retains automatic hide/restore behavior. Modal dialogs still consume their outside-dismissal touch.
 
-[Android haptic feedback](https://developer.android.com/develop/ui/views/haptics/haptic-feedback) informed semantic view feedback and respecting system preferences. [ValueAnimator](https://developer.android.com/reference/android/animation/ValueAnimator) supplies the system animation-enabled check used by the new motion paths. No additional plugins or dependencies were necessary for this iteration.
+## Verification and limits
+
+The specialty-brush snapshot passed **259 local tests**, debug/release APK assembly and debug lint. Regressions check dismissal across idle restore, distinct stamp silhouettes and identical rendering after document round trips. Galaxy Tab S9 FE checks covered dismissal, picker visibility/navigation and the Star chain preview; the build is installed on that tablet.
+
+Earlier instrumentation and software-render measurements are historical evidence in [release hardening](RELEASE_HARDENING.md). This update does not establish physical S Pen latency, full phone/split-screen coverage, localization completion or release-ready dense-scene performance. Specialty stamps are rendered individually and still need representative workload profiling.
+
+## Design references
+
+[Procreate's brush library](https://help.procreate.com/procreate/handbook/brushes/brush-library) informed the breadth of drawing, charcoal and spatter categories. All presets and stamp geometry here are original procedural implementations; no third-party brush assets are bundled. See [Sketchbook brush types](https://help.sketchbook.com/docs/what-are-brush-types) for the distinction between standard brushes and natural-media blending, which this collection does not claim to reproduce.

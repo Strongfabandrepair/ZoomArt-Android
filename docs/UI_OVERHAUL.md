@@ -1,5 +1,7 @@
 > Historical engineering record. For the current interface and identity, see [User guide](USER_GUIDE.md), [Brand guide](BRAND_GUIDE.md) and [Release readiness](RELEASE_HARDENING.md).
 
+> Historical planning/engineering record. For the current product behavior, brush collection and verification status, use the [documentation index](README.md) and [user guide](USER_GUIDE.md). Earlier test counts and release targets below are preserved as historical evidence.
+
 # ZoomArt — UI Overhaul: Procreate-style Glass (U1–U4, v0.6.0)
 
 The 0.6.0 overhaul restyles the verified 0.5.0 app to a modern-minimalist,

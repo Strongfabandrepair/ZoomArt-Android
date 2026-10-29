@@ -37,7 +37,7 @@ ZoomArt stores drawn geometry in nested local coordinate frames. Zooming can mov
 
 ## Brush Atelier
 
-Open **Brush** and choose a preset from **Your brush shelf**. Use the **Ink Lab** scratchpad to try the actual brush renderer without changing your drawing. **Replay** animates a sample; **Save brush** stores your current brush settings as a personal preset on this device.
+Open **Brush** and choose from 24 presets on **Your brush shelf**, or use **Find a brush** for a labeled list. Use the **Ink Lab** scratchpad to try the actual brush renderer without changing your drawing. **Clear** empties the pad; **Replay** animates a sample; **Save brush** stores your current brush settings as a personal preset on this device.
 
 The main controls are **Size**, **Opacity** and **Pressure**. **Fine tune** reveals:
 
@@ -47,7 +47,29 @@ The main controls are **Size**, **Opacity** and **Pressure**. **Fine tune** reve
 - **Pressure controls opacity** and **Minimum opacity** for lighter or darker ink under pressure.
 - **Erase size**, **Stabilizer** and its radius for editing and steadier curves.
 
-The stabilizer makes the brush trail the pointer, smoothing small movements. A larger radius produces more lag. Brush effects vary by preset, so use the scratchpad when changing several settings together. Saved personal brush presets are device preferences; a portable project archive preserves the brush settings used by existing strokes, not your entire personal preset shelf.
+The stabilizer makes the brush trail the pointer, smoothing small movements. Ink Lab uses the same radius, smoothing and completed-stroke taper as the canvas. The Lazy shortcut and Atelier share the enabled state. A larger radius produces more lag. Brush effects vary by preset, so use the scratchpad when changing several settings together. Saved personal brush presets are device preferences; a portable project archive preserves the brush settings used by existing strokes, not your entire personal preset shelf.
+
+## Specialty brush collection
+
+Choose a brush for the mark you want, then try it in Ink Lab:
+
+| Use | Brushes |
+|---|---|
+| Everyday drawing | Ballpoint, Marker, Soft Brush, Fine Ink, Highlighter, Pencil |
+| Clean lines and lettering | Technical pen, Expressive ink, Calligraphy, Broad nib |
+| Texture and shading | Charcoal grain, Graphite shade, Pastel dust, Spray, Ink spatter, Mist, Stipple |
+| Broken lines | Dashed, Stitch |
+| Decorative marks | Stardust, Star chain, Foliage, Confetti, Dry chisel |
+
+Technical pen keeps its width steady. Expressive ink responds strongly to pressure. Calligraphy and Broad nib have flat ends. Stardust and Star chain stamp stars, Foliage stamps leaves, and Confetti and Dry chisel use flat rectangular stamps. Texture names describe procedural effects; the app does not simulate wet paint mixing.
+
+For decorative stamps, keep **Spacing** above zero. Increase spacing for separate marks, increase scatter for a wider trail, and use nib angle to rotate the stamp. Enabling dashes switches away from stamp rendering. Size, opacity and pressure still shape the result. Save a variation with **Save brush**; hold a personal shelf card to remove it. Up to 32 personal presets can be stored, and saving the same name replaces that preset.
+
+Projects and portable archives retain each stroke's stamp shape. Personal preset shelves remain device-local. Older app versions may render new stamp shapes as round dots; use this build or newer when sharing these projects.
+
+## Pen contact and panels
+
+Touch the canvas with the stylus to close floating tool panels immediately. They remain closed after you lift the pen; tap their toolbar buttons to reopen them. The dock's automatic hide/restore behavior is separate and follows Settings. Standard modal menus consume the outside touch that closes them; touch the canvas again to begin drawing.
 
 ## Color, erasing and undo
 
@@ -132,9 +154,3 @@ Settings includes default brush, automatic panel hiding, finger drawing, autosav
 | Large drawings respond slowly | Dense visible strokes, images and effects can exceed the current rendering budget. Save a checkpoint before continuing. |
 
 This build has been tested on a Galaxy Tab S9 FE and in automated compact-layout checks. Full TalkBack/localization review, physical-phone and actual split-screen coverage, crash-durability testing and dense-document optimization are still in progress. See [release readiness](RELEASE_HARDENING.md) for the current limits and test evidence.
-
-### Pen contact and Ink Lab
-
-Touch the canvas with your stylus to close floating tool panels. Dialog menus dismiss when you touch outside them; touch the canvas again to draw if a dialog consumed the first touch.
-
-Use **Clear** in Ink Lab to start a fresh preview. The preview follows the active stabilizer radius, smoothing and completed-stroke taper. The Lazy shortcut and Atelier share the same stabilizer state. Calligraphy uses flat nib ends instead of round caps.

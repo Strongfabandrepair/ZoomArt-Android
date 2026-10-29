@@ -285,4 +285,16 @@ class GlassPanelTest {
             panelShell.measuredWidth <= screenH * 3)
         controller.destroy()
     }
+    @Test fun penDismissalSurvivesTheDelayedAutoHideRestore() {
+        val shell=FloatingPanel(context,"DismissRegression",{ null })
+        shell.show()
+        shell.dismissImmediately()
+        shell.setAutoHidden(true)
+        shell.setAutoHidden(false)
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(View.GONE,shell.visibility)
+        assertTrue(!shell.fadedForAutoHide)
+        shell.show()
+        assertEquals(View.VISIBLE,shell.visibility)
+    }
 }

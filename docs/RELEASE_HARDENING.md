@@ -1,5 +1,14 @@
 # Release hardening — 29 October 2026
 
+## Latest verification — specialty brush snapshot
+
+- **259 local tests passed**, including distinct stamp silhouettes, save/reopen rendering, calligraphy caps, stabilizer geometry and permanent panel dismissal across delayed restore.
+- Debug and optimized release APK assembly and debug lint passed. This snapshot did not rerun the full device instrumentation suite, release bundle or release lint; counts in the earlier sections below remain historical.
+- The updated debug build was installed on the Galaxy Tab S9 FE / Android 16. Tablet UI checks verified stylus dismissal, the corrected picker layout, specialty entries and Star chain preview.
+- The collection now has 24 presets and round/star/leaf/chisel stamp rendering. Document and personal-preset persistence include stampShape, with ROUND fallback when absent or unknown. Older apps may ignore the new shape field.
+- Current docs and the offline guide describe these behaviors. Updating docs does not resolve the remaining release gates listed below.
+
+
 ## Implemented
 
 - Autosave and pause saves capture detached document snapshots and coalesce revisions on one process-wide writer. Serialization and disk work run off the UI thread. A flushed sibling temporary file is atomically moved over the previous document; a failed replacement preserves the old file and reports failure. Activity recreation can restore the latest queued revision.
@@ -62,6 +71,6 @@ References: [Android 16 setup](https://developer.android.com/about/versions/16/s
 
 ## Pen workflow follow-up
 
-Floating panels dismiss when a stylus or stylus eraser contacts the canvas, including contact after a finger. Standard modal menus use outside-touch dismissal (the dismissal touch is consumed). Ink Lab shares stabilizer geometry, smoothing and taper with the canvas and offers Clear. Calligraphy no longer receives circular endpoint caps. The rope calculation now maintains its configured maximum distance behind the pen; regression expectations cover that distance at different zoom levels.
+Floating panels dismiss immediately and stay closed until explicitly reopened when a stylus or stylus eraser contacts the canvas, including contact after a finger. Standard modal menus use outside-touch dismissal (the dismissal touch is consumed). Ink Lab shares stabilizer geometry, smoothing and taper with the canvas and offers Clear. Calligraphy no longer receives circular endpoint caps. The rope calculation now maintains its configured maximum distance behind the pen; regression expectations cover that distance at different zoom levels.
 
 This follow-up does not resolve the previously documented dense-scene performance, complete localization, or full phone/split-screen release matrix. Those remain release gates.

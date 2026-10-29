@@ -70,6 +70,17 @@ class BrushPanel(
         action("Save brush", actions) { savePreset() }
         body.addView(actions)
         label("YOUR BRUSH SHELF", body)
+        val pickerRow = LinearLayout(context)
+        body.addView(pickerRow, LayoutParams(-1,-2))
+        action("Find a brush", pickerRow) {
+            val options = BrushPresets.all + saved
+            AlertDialog.Builder(context).setTitle("Choose your brush")
+                .setItems(options.map { it.first }.toTypedArray()) { _, index ->
+                    selectedName=options[index].first
+                    currentSpec=options[index].second.copy(color=currentSpec.color,erase=false)
+                    syncFrom(currentSpec); emit(); preview.replay(); rebuildShelf()
+                }.show()
+        }
         val shelfScroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false }
         shelfScroll.addView(shelf); body.addView(shelfScroll, LayoutParams(-1, dp(92)))
         loadSaved(); rebuildShelf()
@@ -159,7 +170,7 @@ class BrushPanel(
                 background = android.graphics.drawable.StateListDrawable().apply {
                     addState(intArrayOf(android.R.attr.state_selected), face(true)); addState(intArrayOf(), face(false))
                 }
-                contentDescription = name; isFocusable = true
+                contentDescription = name; isFocusable = true; isSelected = name == selectedName
                 addView(BrushPreviewView(context, name, spec), LayoutParams(dp(84), dp(32)))
                 addView(TextView(context).apply { text = name; textSize = 11f; setTextColor(ink); maxLines = 2; gravity = Gravity.CENTER }, LayoutParams(-1, dp(32)))
                 setOnClickListener {
@@ -193,7 +204,7 @@ class BrushPanel(
         saved.forEach { (name,b) -> array.put(JSONObject().put("name",name).put("width",b.baseWidthWorld)
             .put("pressure",b.pressureResponse).put("minWidth",b.minWidthRatio).put("opacity",b.opacity)
             .put("angle",b.angleDeg).put("on",b.dashOn).put("off",b.dashOff).put("scatter",b.scatterWorld)
-            .put("spacing",b.spacingWorld).put("pressureOpacity",b.pressureOpacity).put("minOpacity",b.minOpacity)) }
+            .put("stampShape",b.stampShape.name).put("spacing",b.spacingWorld).put("pressureOpacity",b.pressureOpacity).put("minOpacity",b.minOpacity)) }
         prefs.edit().putString("presets",array.toString()).apply()
     }
     private fun loadSaved() {
@@ -206,6 +217,7 @@ class BrushPanel(
                     opacity=b.getDouble("opacity").toFloat(), angleDeg=b.getDouble("angle").toFloat(),
                     dashOn=b.getDouble("on").toFloat(),dashOff=b.getDouble("off").toFloat(),
                     scatterWorld=b.getDouble("scatter").toFloat(),spacingWorld=b.getDouble("spacing").toFloat(),
+                    stampShape=StampShape.values().firstOrNull { it.name == b.optString("stampShape") } ?: StampShape.ROUND,
                     pressureOpacity=b.getBoolean("pressureOpacity"),minOpacity=b.getDouble("minOpacity").toFloat()))
             }
         }

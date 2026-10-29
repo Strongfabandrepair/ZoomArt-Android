@@ -4,6 +4,15 @@
 
 The application still reports version 0.7.0. This snapshot consolidates the preceding working changes and updates its identity and documentation; it is not a store release.
 
+### Latest: specialty brushes and persistent panel dismissal
+
+- Expanded the built-in shelf from 9 to 24 brushes, with a labeled **Find a brush** picker.
+- Added Technical pen, Expressive ink, Broad nib, Charcoal grain, Graphite shade, Pastel dust, Ink spatter, Mist, Stipple, Stitch, Stardust, Star chain, Foliage, Confetti and Dry chisel.
+- Added round/star/leaf/chisel stamp rendering; new shapes persist in documents, archives and personal brush presets. Existing documents default to round stamps when the field is absent.
+- Stylus contact closes floating panels immediately. The idle restore timer cannot reopen an explicitly dismissed panel; the dock still restores normally.
+- Added the offline title-screen User Guide; Ink Lab Clear; shared stabilizer preview/smoothing/taper; corrected the stabilizer radius calculation and removed round calligraphy endpoint caps.
+- Current verification: **259 local tests**, debug/release APK builds and debug lint passed. Tablet UI checks covered dismissal after the idle delay, the picker and Star chain preview. Earlier instrumentation counts below are historical, not a rerun of this snapshot.
+
 ### Drawing and reliability
 
 - Renderer, eraser, selection, pressure/brush and export corrections with regression coverage.

@@ -6,6 +6,8 @@ import kotlin.math.pow
  * Parametric brush definition. Everything is expressed in WORLD units, so a
  * stroke re-renders vector-crisp at any zoom level.
  */
+enum class StampShape { ROUND, STAR, LEAF, CHISEL }
+
 data class BrushSpec(
     val baseWidthWorld: Float = 6f,     // stroke width (world units) at full pressure
     val pressureResponse: Float = 2f,  // >1 favours light touch; 0 ignores pressure
@@ -19,6 +21,7 @@ data class BrushSpec(
     val spacingWorld: Float = 0f,    // stamp spacing (0 = continuous outline)
     val pressureOpacity: Boolean = false, // P1.2: pressure drives alpha, not just width
     val minOpacity: Float = DEFAULT_MIN_OPACITY, // alpha floor at zero pressure
+    val stampShape: StampShape = StampShape.ROUND,
     val erase: Boolean = false,      // v0.7.0: erase-as-modifier — carve instead of draw
 ) {
     /**

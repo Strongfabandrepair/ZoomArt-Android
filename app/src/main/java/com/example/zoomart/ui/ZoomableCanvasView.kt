@@ -108,6 +108,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
      * the user is drawing, restoring them ~600 ms after the last gesture.
      * Finger pans never fire this (panels stay put while navigating).
      */
+    var onStylusContact: (() -> Unit)? = null
     var onCanvasActivityChanged: ((Boolean) -> Unit)? = null
 
     /**
@@ -634,6 +635,8 @@ class ZoomableCanvasView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if ((event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) &&
+            isPenEvent(event, event.actionIndex)) onStylusContact?.invoke()
         val cam = viewModel.camera
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -1411,9 +1414,14 @@ class ZoomableCanvasView @JvmOverloads constructor(
             strokeFillPaint.alpha =
                 (brush.alphaForPressure(pts[0].pressure01) * layerOpacity * 255f)
                     .toInt().coerceIn(0, 255)
-            canvas.drawCircle(
-                pts[0].x, pts[0].y,
-                brush.widthForPressure(pts[0].pressure01) * 0.5f, strokeFillPaint)
+            val radius = brush.widthForPressure(pts[0].pressure01) * 0.5f
+            if (brush.angleDeg != 0f && brush.spacingWorld == 0f) {
+                canvas.save()
+                canvas.rotate(brush.angleDeg, pts[0].x, pts[0].y)
+                canvas.drawRect(pts[0].x-radius, pts[0].y-radius*0.12f,
+                    pts[0].x+radius, pts[0].y+radius*0.12f, strokeFillPaint)
+                canvas.restore()
+            } else canvas.drawCircle(pts[0].x, pts[0].y, radius, strokeFillPaint)
             return
         }
 
@@ -1504,7 +1512,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 val circle = Path().apply { addCircle(point.x, point.y, radius, Path.Direction.CW) }
                 outline.op(circle, Path.Op.UNION)
             }
-            cap(first, rFirst); cap(last, rLast)
+            if (brush.angleDeg == 0f) { cap(first, rFirst); cap(last, rLast) }
             if (cacheable) outlineCache.put(stroke, CachedOutline(stroke.geometryRevision,
                 stroke.taper, outline, 128 + pts.size.coerceAtMost(100_000) * 32, rFirst, rLast))
             canvas.drawPath(outline, strokeFillPaint)

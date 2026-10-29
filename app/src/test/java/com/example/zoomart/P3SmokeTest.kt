@@ -191,7 +191,7 @@ class P3SmokeTest {
         assertEquals("first committed point is the pen-down point",
             100f, s.points.first().x, 0.0001f)
         assertEquals("last committed point is the ROPE brush point (pen at 4r)",
-            150f, s.points.last().x, 0.0001f)
+            250f, s.points.last().x, 0.0001f)
         assertEquals(100f, s.points.last().y, 0.0001f)
         assertTrue("smoothed stroke has more points than raw events",
             s.points.size > 2)

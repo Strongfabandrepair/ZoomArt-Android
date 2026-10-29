@@ -132,3 +132,9 @@ Settings includes default brush, automatic panel hiding, finger drawing, autosav
 | Large drawings respond slowly | Dense visible strokes, images and effects can exceed the current rendering budget. Save a checkpoint before continuing. |
 
 This build has been tested on a Galaxy Tab S9 FE and in automated compact-layout checks. Full TalkBack/localization review, physical-phone and actual split-screen coverage, crash-durability testing and dense-document optimization are still in progress. See [release readiness](RELEASE_HARDENING.md) for the current limits and test evidence.
+
+### Pen contact and Ink Lab
+
+Touch the canvas with your stylus to close floating tool panels. Dialog menus dismiss when you touch outside them; touch the canvas again to draw if a dialog consumed the first touch.
+
+Use **Clear** in Ink Lab to start a fresh preview. The preview follows the active stabilizer radius, smoothing and completed-stroke taper. The Lazy shortcut and Atelier share the same stabilizer state. Calligraphy uses flat nib ends instead of round caps.

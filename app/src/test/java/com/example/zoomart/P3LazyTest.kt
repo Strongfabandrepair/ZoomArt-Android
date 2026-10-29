@@ -13,7 +13,7 @@ import kotlin.math.abs
 
 /**
  * P3.2 LAZY BRUSH suite (docs/REVIEW_2026-10-18.md LAZY BRUSH section):
- * pure rope math (pen inside radius -> static, pen at 3r -> brush at r
+ * pure rope math (pen inside radius -> static, pen at 3r -> brush at 2r
  * along the direction, radius 0 = raw pen), midpoint-quad smoothing
  * geometry, arclength taper factors, outline-width tapering, and the
  * ViewModel commit path (screen rope -> level-local stroke points at any
@@ -38,20 +38,20 @@ class P3LazyTest {
     }
 
     @Test
-    fun penAtThreeRadiiMovesBrushToExactlyRAlongTheDirection() {
+    fun penOutsideRadiusKeepsBrushExactlyOneRadiusBehind() {
         val rope = LazyBrush(radiusScreen = 50f)
         rope.begin(100f, 100f)
         val b = rope.feed(250f, 100f) // pen at distance 3r, straight right
-        assertEquals(150f, b[0], 0.0001f)
+        assertEquals(200f, b[0], 0.0001f)
         assertEquals(100f, b[1], 0.0001f)
-        assertEquals(50.0, dist(100.0f, 100.0f, rope.brushX, rope.brushY), 1e-4)
+        assertEquals(50.0, dist(250.0f, 100.0f, rope.brushX, rope.brushY), 1e-4)
 
         // diagonal direction too
         rope.begin(0f, 0f)
         val c = rope.feed(300f, 400f) // distance 500 = 10r along (3,4)/5
-        assertEquals(30f, c[0], 0.001f)
-        assertEquals(40f, c[1], 0.001f)
-        assertEquals(50.0, dist(0f, 0f, rope.brushX, rope.brushY), 1e-4)
+        assertEquals(270f, c[0], 0.001f)
+        assertEquals(360f, c[1], 0.001f)
+        assertEquals(50.0, dist(300f, 400f, rope.brushX, rope.brushY), 1e-4)
     }
 
     @Test
@@ -153,10 +153,10 @@ class P3LazyTest {
         assertTrue(vm.lazyActive)
 
         vm.beginStrokeAtScreen(100f, 100f, 1f)
-        vm.extendStrokeAtScreen(300f, 100f, 1f) // pen at 4r -> brush at (150,100)
+        vm.extendStrokeAtScreen(300f, 100f, 1f) // pen at 4r -> brush at (250,100)
         val live = vm.inProgress!!
         assertEquals("stroke point = rope brush point in level-local coords (scale 1)",
-            150f, live.points[1].x, 0.0001f)
+            250f, live.points[1].x, 0.0001f)
         assertEquals(100f, live.points[1].y, 0.0001f)
         assertEquals(0f, live.taper, 0f) // taper lands at commit, not live
 
@@ -167,7 +167,7 @@ class P3LazyTest {
             true, s.points.size > 2)
         assertEquals("endpoints survive smoothing exactly",
             100f, s.points.first().x, 0.0001f)
-        assertEquals(150f, s.points.last().x, 0.0001f)
+        assertEquals(250f, s.points.last().x, 0.0001f)
         assertEquals("lazy strokes carry the taper fraction",
             LazyBrush.TAPER_FRACTION, s.taper, 0.0001f)
         assertFalse("gesture ended", vm.lazyBrush.active)
@@ -182,9 +182,9 @@ class P3LazyTest {
 
         vm.beginStrokeAtScreen(100f, 100f, 0.8f)
         vm.extendStrokeAtScreen(300f, 100f, 0.8f)
-        // brush at (150,100) screen -> local (37.5, 25)
+        // brush at (250,100) screen -> local (62.5, 25)
         val live = vm.inProgress!!
-        assertEquals(37.5f, live.points[1].x, 0.0001f)
+        assertEquals(62.5f, live.points[1].x, 0.0001f)
         assertEquals(25f, live.points[1].y, 0.0001f)
     }
 

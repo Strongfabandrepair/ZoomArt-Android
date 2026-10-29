@@ -98,4 +98,16 @@ class RenderingRegressionTest {
         assertEquals(bitmap.getPixel(64,64),bitmap.getPixel(26,64))
         bitmap.recycle()
     }
+    @Test fun calligraphyEndsDoNotHaveRoundBulbs() {
+        val v=view()
+        val stroke=StrokeData(BrushSpec(baseWidthWorld=20f,angleDeg=45f)).apply {
+            addPoint(StrokePoint(24f,64f,1f)); addPoint(StrokePoint(104f,64f,1f))
+        }
+        val bitmap=Bitmap.createBitmap(128,128,Bitmap.Config.ARGB_8888)
+        v.drawStroke(Canvas(bitmap),stroke,1f)
+        assertEquals(0, Color.alpha(bitmap.getPixel(15,64)))
+        assertEquals(0, Color.alpha(bitmap.getPixel(113,64)))
+        assertTrue(Color.alpha(bitmap.getPixel(64,64)) > 0)
+        bitmap.recycle()
+    }
 }

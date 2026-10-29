@@ -59,3 +59,9 @@ adb -s DEVICE_SERIAL shell am instrument -w com.example.zoomart.test/androidx.te
 The frame profile writes `cache/frame_profile_1000.txt` and `cache/frame_profile_10000.txt` inside the debug app. Production artifacts remain unsigned until an appropriate release signing configuration is supplied.
 
 References: [Android 16 setup](https://developer.android.com/about/versions/16/setup-sdk), [AGP/API compatibility](https://developer.android.com/build/releases/about-agp), [Android 16 behavior changes](https://developer.android.com/about/versions/16/behavior-changes-16).
+
+## Pen workflow follow-up
+
+Floating panels dismiss when a stylus or stylus eraser contacts the canvas, including contact after a finger. Standard modal menus use outside-touch dismissal (the dismissal touch is consumed). Ink Lab shares stabilizer geometry, smoothing and taper with the canvas and offers Clear. Calligraphy no longer receives circular endpoint caps. The rope calculation now maintains its configured maximum distance behind the pen; regression expectations cover that distance at different zoom levels.
+
+This follow-up does not resolve the previously documented dense-scene performance, complete localization, or full phone/split-screen release matrix. Those remain release gates.

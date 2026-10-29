@@ -172,6 +172,7 @@ class MainActivity : AppCompatActivity() {
         updateSwatch()
         overlay.autoHideEnabled = AppSettings.getAutoHide(this)
 
+        canvasView.onStylusContact = { shellOf.values.forEach { it.dismiss() } }
         canvasView.onStateChanged = { refreshToolbar() }
         canvasView.onEyedrop = { color ->
             canvasView.viewModel.currentBrush =
@@ -532,6 +533,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun togglePanel(panel: View) {
         val shell = shellOf[panel] ?: return
+        if (panel === brushPanel) brushPanel.syncStabilizer(canvasView.viewModel.lazyEnabled, canvasView.viewModel.lazyBrush.radiusScreen)
         val wasOpen = shell.isShowing
         // Dismiss all other panel shells first (one panel at a time)
         for (s in listOf(brushPanel, layersPanel, pinsPanel, shapesPanel, blendPanel, imagePanel)) {

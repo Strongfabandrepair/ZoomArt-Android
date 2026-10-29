@@ -56,7 +56,7 @@ class LazyBrush(var radiusScreen: Float = 0f) {
         val dy = penY - brushY
         val d = hypot(dx.toDouble(), dy.toDouble()).toFloat()
         if (d <= r) return floatArrayOf(brushX, brushY)
-        val t = r / d
+        val t = (d - r) / d
         brushX += dx * t
         brushY += dy * t
         return floatArrayOf(brushX, brushY)

@@ -26,6 +26,12 @@ class BrushPanel(
     private var currentSpec = BrushSpec()
     private var lazyOn = false
     private var lazyRadius = 60f
+    private lateinit var lazyToggle: Button
+    fun syncStabilizer(enabled: Boolean, radius: Float) {
+        lazyOn = enabled; lazyRadius = radius
+        lazyToggle.text = if (enabled) "Stabilizer · ON" else "Stabilizer · OFF"
+        preview.setStabilizer(enabled, radius)
+    }
     private val bars = mutableListOf<Pair<SeekBar, (BrushSpec) -> Int>>()
     private val shelf = LinearLayout(context).apply { orientation = HORIZONTAL }
     private val preview = PreviewStrip(context)
@@ -59,6 +65,7 @@ class BrushPanel(
         label("INK LAB  ·  draw here to try", body)
         body.addView(preview, LayoutParams(-1, dp(88)))
         val actions = LinearLayout(context)
+        action("Clear", actions) { preview.clear() }
         action("Replay", actions) { preview.replay() }
         action("Save brush", actions) { savePreset() }
         body.addView(actions)
@@ -97,10 +104,11 @@ class BrushPanel(
         slider("Erase size", { 24 }, { "${(5 + it * 1.45f).roundToInt()} px" }, details, false) { onEraserRadius(5 + it * 1.45f) }
         val lazy = Button(context).apply {
             text = "Stabilizer · OFF"; contentDescription = "lazy toggle"; isAllCaps = false
-            setOnClickListener { lazyOn = !lazyOn; text = if (lazyOn) "Stabilizer · ON" else "Stabilizer · OFF"; onLazyChanged(lazyOn, lazyRadius); Springs.pulse(this) }
+            setOnClickListener { lazyOn = !lazyOn; text = if (lazyOn) "Stabilizer · ON" else "Stabilizer · OFF"; preview.setStabilizer(lazyOn, lazyRadius); onLazyChanged(lazyOn, lazyRadius); Springs.pulse(this) }
         }
+        lazyToggle = lazy
         details.addView(lazy, LayoutParams(-1, dp(48)))
-        slider("Stabilizer radius", { 30 }, { "${it * 2} px" }, details, false) { lazyRadius = it * 2f; onLazyChanged(lazyOn, lazyRadius) }.contentDescription = "lazy radius slider"
+        slider("Stabilizer radius", { 30 }, { "${it * 2} px" }, details, false) { lazyRadius = it * 2f; preview.setStabilizer(lazyOn, lazyRadius); onLazyChanged(lazyOn, lazyRadius) }.contentDescription = "lazy radius slider"
         syncFrom(currentSpec)
     }
     private fun label(text: String, parent: LinearLayout) {
@@ -247,17 +255,33 @@ class PreviewStrip(context: Context) : View(context) {
     private var reveal = 1f
     private var animation: android.animation.ValueAnimator? = null
     private var drawing = false
+    private var previousSample: StrokeData? = null
     private var pointer = -1
+    private val stabilizer = LazyBrush()
+    private var stabilized = false
+    fun clear() { animation?.cancel(); reveal=1f; sample=StrokeData(spec.scaledForLocalScale(1f/density)); invalidate() }
+    fun setStabilizer(enabled: Boolean, radius: Float) {
+        if (stabilized == (enabled && radius > 0f) && stabilizer.radiusScreen == (if (enabled) radius else 0f)) return
+        stabilized = enabled && radius > 0f
+        stabilizer.radiusScreen = if (enabled) radius else 0f
+        replay()
+    }
     init { contentDescription = "Live brush test pad. Draw to try the current brush"; isFocusable = true }
     fun setSpec(value: BrushSpec) { animation?.cancel(); reveal = 1f; spec = value; resetSample(); invalidate() }
     private fun resetSample() {
         sample = StrokeData(spec.scaledForLocalScale(1f / density))
+        val rope = LazyBrush(if (stabilized) stabilizer.radiusScreen else 0f)
         for (i in 0..100) {
             val t = i / 100f
-            sample.addPoint(StrokePoint(width*(0.08f+0.84f*t), height*(0.5f + 0.22f*sin(t*2f*PI.toFloat())),
-                0.12f + 0.88f*sin(t*PI.toFloat())))
+            val x = width*(0.08f+0.84f*t)
+            val y = height*(0.5f + 0.22f*sin(t*2f*PI.toFloat()))
+            if (i == 0) rope.begin(x,y)
+            val xy = rope.feed(x,y)
+            sample.addPoint(StrokePoint(xy[0],xy[1],0.12f + 0.88f*sin(t*PI.toFloat())))
         }
+        if (stabilized) { sample.setPoints(LazyBrush.smoothPoints(sample.points)); sample.taper=LazyBrush.TAPER_FRACTION }
     }
+
     fun replay() {
         animation?.cancel(); resetSample()
         if (!Springs.enabled()) { reveal = 1f; invalidate(); return }
@@ -273,25 +297,28 @@ class PreviewStrip(context: Context) : View(context) {
         var x = 12*density
         while (x < width) { var y = 12*density; while (y < height) { canvas.drawCircle(x,y,0.65f*density,paint); y += 16*density }; x += 16*density }
         canvas.save(); canvas.clipRect(0f,0f,width*reveal,height.toFloat())
-        renderer.drawStroke(canvas,sample,1f); canvas.restore()
+        renderer.drawStroke(canvas,sample,1f, if (stabilized && drawing) LazyBrush.smoothPoints(sample.points) else null); canvas.restore()
     }
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when(event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                previousSample=sample
                 animation?.cancel(); reveal=1f; drawing=true; pointer=event.getPointerId(0)
                 parent?.requestDisallowInterceptTouchEvent(true)
-                sample=StrokeData(spec.scaledForLocalScale(1f/density)); add(event,0)
+                sample=StrokeData(spec.scaledForLocalScale(1f/density)); stabilizer.begin(event.x,event.y); add(event,0)
             }
             MotionEvent.ACTION_MOVE -> { val i=event.findPointerIndex(pointer); if(drawing && i>=0) add(event,i) }
-            MotionEvent.ACTION_UP -> { val i=event.findPointerIndex(pointer); if(i>=0) add(event,i); drawing=false; parent?.requestDisallowInterceptTouchEvent(false); performClick() }
-            MotionEvent.ACTION_CANCEL -> { drawing=false; parent?.requestDisallowInterceptTouchEvent(false) }
+            MotionEvent.ACTION_UP -> { val i=event.findPointerIndex(pointer); if(i>=0) add(event,i); drawing=false; if (stabilized && sample.points.size > 1) { sample.setPoints(LazyBrush.smoothPoints(sample.points)); sample.taper=LazyBrush.TAPER_FRACTION }; stabilizer.end(); parent?.requestDisallowInterceptTouchEvent(false); performClick() }
+            MotionEvent.ACTION_CANCEL -> { previousSample?.let { sample=it }; previousSample=null; stabilizer.end(); drawing=false; parent?.requestDisallowInterceptTouchEvent(false) }
         }
         invalidate(); return true
     }
     private fun add(e: MotionEvent,i: Int) {
         if(sample.points.size>=512) return
         val pressure=if(e.getToolType(i)==MotionEvent.TOOL_TYPE_STYLUS) e.getPressure(i).coerceIn(0f,1f) else 1f
-        sample.addPoint(StrokePoint(e.getX(i),e.getY(i),pressure))
+        val xy = if (stabilized) stabilizer.feed(e.getX(i),e.getY(i)) else floatArrayOf(e.getX(i),e.getY(i))
+        val last = sample.points.lastOrNull()
+        if (last == null || last.x != xy[0] || last.y != xy[1]) sample.addPoint(StrokePoint(xy[0],xy[1],pressure))
     }
     override fun performClick(): Boolean { super.performClick(); return true }
     override fun onDetachedFromWindow() { animation?.cancel(); reveal = 1f; super.onDetachedFromWindow() }

@@ -49,3 +49,11 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
+
+// Package the maintained guide directly, so the offline reader cannot drift from docs.
+val prepareUserGuide by tasks.registering(Sync::class) {
+    from(rootProject.file("docs/USER_GUIDE.md"))
+    into(layout.buildDirectory.dir("generated/userGuideAssets"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/userGuideAssets"))
+tasks.named("preBuild").configure { dependsOn(prepareUserGuide) }

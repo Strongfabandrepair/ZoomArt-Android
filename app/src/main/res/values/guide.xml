@@ -1,0 +1,7 @@
+<resources>
+<string name="user_guide">User Guide</string>
+<string name="guide_back">Back</string>
+<string name="guide_topics">Topics</string>
+<string name="guide_intro">New here? Start with your first drawing, then explore the tools at your own pace. This guide works offline.</string>
+<item name="user_guide_scroll" type="id" />
+</resources>

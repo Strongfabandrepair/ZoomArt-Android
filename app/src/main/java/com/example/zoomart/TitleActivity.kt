@@ -140,6 +140,9 @@ class TitleActivity : AppCompatActivity() {
         col.addView(brandButton(getString(R.string.project_library), R.drawable.ic_studio) {
             startActivity(Intent(this, ProjectLibraryActivity::class.java))
         })
+        col.addView(brandButton(getString(R.string.user_guide), R.drawable.ic_guide) {
+            startActivity(Intent(this, UserGuideActivity::class.java))
+        },LinearLayout.LayoutParams(-1,-2).apply { topMargin=(density*10).toInt() })
         // Disable resume when there's nothing to resume.
         resumeBtn.isEnabled = AppSettings.hasResumeableSession(this)
         resumeBtn.alpha = if (resumeBtn.isEnabled) 1f else 0.5f

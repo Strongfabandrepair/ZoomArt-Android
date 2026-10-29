@@ -23,6 +23,7 @@
                 android:resource="@xml/export_paths" />
         </provider>
 
+        <activity android:name=".UserGuideActivity" android:exported="false" />
         <activity android:name=".ProjectLibraryActivity" android:exported="false" />
         <activity
             android:name=".TitleActivity"

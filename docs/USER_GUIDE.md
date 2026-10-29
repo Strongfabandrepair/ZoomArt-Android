@@ -2,6 +2,8 @@
 
 For the current **0.7.0 development build**. Requires Android 8.0 or later. A pressure-sensitive stylus such as an S Pen is recommended; finger drawing can be enabled in Settings.
 
+Open **User Guide** on the title screen to read these instructions offline. Use **Topics** to jump to a section and **Back** to return to the welcome screen.
+
 ## Your first drawing
 
 1. Open **ZoomArt**. Choose **Start New** on the welcome screen. If a session already exists, confirm only after reading the backup message.

@@ -87,6 +87,8 @@ class StrokeData(
     /** Owning zoom level (P0). Root (0) == legacy world space. */
     var levelId: Long = ZoomLevels.ROOT_ID
     val points = mutableListOf<StrokePoint>()
+    var geometryRevision = 0L
+        private set
 
     /**
      * P3.2: end-taper fraction (0 = none). Lazy-brush strokes commit with
@@ -103,6 +105,7 @@ class StrokeData(
     var maxY = -Float.MAX_VALUE
 
     fun addPoint(p: StrokePoint) {
+        geometryRevision++
         points.add(p)
         if (p.x < minX) minX = p.x
         if (p.x > maxX) maxX = p.x
@@ -115,6 +118,7 @@ class StrokeData(
 
     /** Replaces all points and recomputes the bounding box (transforms). */
     fun setPoints(pts: List<StrokePoint>) {
+        geometryRevision++
         points.clear()
         points.addAll(pts)
         minX = Float.MAX_VALUE; maxX = -Float.MAX_VALUE

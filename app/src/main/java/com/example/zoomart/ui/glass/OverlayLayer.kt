@@ -67,6 +67,8 @@ class OverlayLayer(context: Context) : FrameLayout(context) {
 
     /** Canvas reports stylus-stroke / pinch begin(true)/end(false). */
     fun onCanvasActivity(active: Boolean) {
+        dock?.setAmbientPaused(active)
+        shells.forEach { it.setAmbientPaused(active) }
         autoHide.canvasActivity(active)
     }
 
@@ -76,8 +78,11 @@ class OverlayLayer(context: Context) : FrameLayout(context) {
     /** Whether auto-hide is active (user can disable it in Settings). */
     var autoHideEnabled = true
         set(value) {
+            if (!value) {
+                autoHide.resetToIdle()
+                applyAutoHidden(false)
+            }
             field = value
-            if (!value) autoHide.resetToIdle()
         }
 
     private fun applyAutoHidden(hidden: Boolean) {

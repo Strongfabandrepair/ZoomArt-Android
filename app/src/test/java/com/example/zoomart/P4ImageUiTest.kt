@@ -426,7 +426,7 @@ class P4ImageUiTest {
         // camera at root, scale 1. Eraser radius 0.04 ROOT units -> the
         // child's frame sees radius 0.04 * 100 = 4 local units; the center
         // (0.03, 0) root -> (3, 0) child. Points within 4 of x=3: 0, 2, 4
-        // (7.5 is 4.5 away and must SURVIVE).
+        // The new swept eraser also includes the 3-unit ink half-width; the tail starts at 10.1.
         vm.eraserRadiusWorld = 0.04f
         vm.beginErase(0.03f, 0f)
         assertTrue(vm.eraseTo(0.031f, 0f))
@@ -437,7 +437,7 @@ class P4ImageUiTest {
         assertNotSame(stroke, frag)
         assertEquals("fragments inherit the erased stroke's levelId", child.id, frag.levelId)
         assertEquals(3, frag.points.size)
-        assertEquals(7.5f, frag.points[0].x, 0.001f)
+        assertEquals(10.1f, frag.points[0].x, 0.001f)
         assertEquals(20f, frag.points[1].x, 0.001f)
         assertEquals(22f, frag.points[2].x, 0.001f)
 
@@ -477,7 +477,7 @@ class P4ImageUiTest {
     }
 
     @Test
-    fun cameraLevelEraserBehavesExactlyAsBefore() {
+    fun cameraLevelEraserClipsAtSweptInkBoundary() {
         // strokes of the camera's own level erase with the pre-P4 math:
         // radius in camera-local units, centers unconverted
         val vm = DrawingViewModel()
@@ -491,7 +491,7 @@ class P4ImageUiTest {
 
         val frag = doc.activeLayer.strokes[0]
         assertEquals(3, frag.points.size)
-        assertEquals(7.5f, frag.points[0].x, 0.001f)
+        assertEquals(10.1f, frag.points[0].x, 0.001f)
         assertEquals(ZoomLevels.ROOT_ID, frag.levelId)
     }
 }

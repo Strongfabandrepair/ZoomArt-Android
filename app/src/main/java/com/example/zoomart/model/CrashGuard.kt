@@ -1,30 +1,43 @@
 package com.example.zoomart.model
 
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
-/**
- * In-flight crash handling: when ANY thread dies on an uncaught exception,
- * snapshot the session so the next launch recovers the drawing, then chain
- * to the previous handler so the system still logs/ANRs normally. Never
- * lets persistence failures mask the original crash.
- */
+/** Best-effort crash recovery without chaining obsolete activity snapshots. */
 object CrashGuard {
-
-    fun install(sessionSerializer: () -> String?, crashFile: File) {
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+    private class Guard(
+        val previous: Thread.UncaughtExceptionHandler?,
+        val serializer: () -> String?,
+        val file: File,
+    ) : Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(thread: Thread, throwable: Throwable) {
             try {
-                val snapshot = sessionSerializer()
-                if (snapshot != null) {
-                    val tmp = File(crashFile.parentFile, crashFile.name + ".tmp")
-                    tmp.writeText(snapshot)
-                    crashFile.delete()
-                    if (!tmp.renameTo(crashFile)) crashFile.writeText(snapshot)
+                serializer()?.let { snapshot ->
+                    val tmp = File(file.parentFile, file.name + ".tmp")
+                    FileOutputStream(tmp).use {
+                        it.write(snapshot.toByteArray(Charsets.UTF_8))
+                        it.fd.sync()
+                    }
+                    Files.move(tmp.toPath(), file.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
                 }
-            } catch (ignored: Throwable) {
-                // never mask the original crash
-            }
+            } catch (_: Throwable) { /* Never mask the original exception. */ }
             previous?.uncaughtException(thread, throwable)
         }
+    }
+
+    fun install(sessionSerializer: () -> String?, crashFile: File): Thread.UncaughtExceptionHandler {
+        val current = Thread.getDefaultUncaughtExceptionHandler()
+        val previous = if (current is Guard) current.previous else current
+        return Guard(previous, sessionSerializer, crashFile).also {
+            Thread.setDefaultUncaughtExceptionHandler(it)
+        }
+    }
+
+    fun uninstall(handler: Thread.UncaughtExceptionHandler?) {
+        if (handler is Guard && Thread.getDefaultUncaughtExceptionHandler() === handler)
+            Thread.setDefaultUncaughtExceptionHandler(handler.previous)
     }
 }

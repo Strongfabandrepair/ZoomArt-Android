@@ -53,4 +53,20 @@ class CrashGuardTest {
         t.join(10_000)
         assertTrue(chained) // original handler still ran; guard swallowed its own failure
     }
+
+    @Test
+    fun reinstallDoesNotOverwriteLatestSnapshotWithOldActivity() {
+        val dir = java.nio.file.Files.createTempDirectory("guard_reinstall").toFile()
+        val file = File(dir, "session.json")
+        var chains = 0
+        Thread.setDefaultUncaughtExceptionHandler { _, _ -> chains++ }
+        CrashGuard.install({ "old" }, file)
+        val latest = CrashGuard.install({ "latest" }, file)
+        latest.uncaughtException(Thread.currentThread(), RuntimeException("test"))
+        assertEquals("latest", file.readText())
+        assertEquals(1, chains)
+        CrashGuard.uninstall(latest)
+        assertTrue(Thread.getDefaultUncaughtExceptionHandler() !== latest)
+        dir.deleteRecursively()
+    }
 }

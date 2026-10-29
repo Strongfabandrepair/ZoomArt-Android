@@ -358,6 +358,7 @@ class SelectionModel(private val doc: () -> DrawingDocument) {
     }
 
     fun beginTransform() {
+        doc().pruneSelectionToActiveLayer()
         if (doc().activeLayer.locked) return // P2.2: locked layers reject transforms
         if (pending != null) return // already inside a gesture (move+pinch combo)
         pending = mutableListOf()
@@ -368,7 +369,7 @@ class SelectionModel(private val doc: () -> DrawingDocument) {
             pendingShapes?.add(ShapeSnapshot(sh, floatArrayOf(sh.x0, sh.y0, sh.x1, sh.y1)))
         }
         for (img in selectedImages) {
-            pendingImages?.add(ImageSnapshot(img, floatArrayOf(img.x, img.y, img.w, img.h, img.rotation)))
+            pendingImages?.add(ImageSnapshot(img, img.props()))
         }
     }
 
@@ -460,7 +461,11 @@ class SelectionModel(private val doc: () -> DrawingDocument) {
         pivotCorner = true,
         imageTransform = { img, px, py ->
             img.flipH = !img.flipH
-            img.x = 2f * px - img.x - img.w
+            if (horizontal) img.x = 2f * px - img.x - img.w
+            else {
+                img.y = 2f * py - img.y - img.h
+                img.rotation += 180f
+            }
         },
     ) { pts, px, py ->
         if (horizontal) StrokeTransforms.scaleAbout(pts, px, py, -1f, 1f)
@@ -586,6 +591,14 @@ class SelectionModel(private val doc: () -> DrawingDocument) {
 
     /** Records the live transform as ONE undoable command (strokes + shapes
      *  + P4.2 images). */
+    fun cancelTransform() {
+        pending?.forEach { it.stroke.setPoints(it.before) }
+        pendingShapes?.forEach { it.shape.setAnchors(it.before[0],it.before[1],it.before[2],it.before[3]) }
+        pendingImages?.forEach { it.image.applyProps(it.before) }
+        pending=null; pendingShapes=null; pendingImages=null
+        doc().reindex()
+    }
+
     fun endTransform() {
         val snaps = pending ?: return
         val shapeSnaps = pendingShapes
@@ -601,7 +614,7 @@ class SelectionModel(private val doc: () -> DrawingDocument) {
             },
             (imageSnaps ?: emptyList()).map {
                 it.image to (it.before to
-                    floatArrayOf(it.image.x, it.image.y, it.image.w, it.image.h, it.image.rotation))
+                    it.image.props())
             },
         )
     }

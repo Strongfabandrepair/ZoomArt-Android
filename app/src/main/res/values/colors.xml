@@ -1,6 +1,9 @@
 <resources>
-    <!-- Brand palette derived from brand/zoomart_icon_512.png -->
-    <color name="brand_background">#1A1C24</color>      <!-- dark navy canvas -->
+    <!-- Orbital identity; legacy color names below remain for compatibility. -->
+    <color name="brand_orbit_lavender">#C7A1FF</color>
+    <color name="brand_orbit_teal">#88DFD0</color>
+    <color name="brand_nib_copper">#FFC38A</color>
+    <color name="brand_background">#111929</color>      <!-- dark navy canvas -->
     <color name="brand_blue">#2E66F6</color>            <!-- inner-ring blue -->
     <color name="brand_blue_dark">#1E4FB8</color>        <!-- pressed/active blue -->
     <color name="brand_white">#FFFFFF</color>            <!-- outer ring / text -->

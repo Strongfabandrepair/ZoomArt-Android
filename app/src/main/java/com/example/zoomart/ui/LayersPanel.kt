@@ -155,6 +155,8 @@ class LayersPanel(
             minimumHeight = 0
             GlassStyle.button(this)
             val d = resources.displayMetrics.density
+            minimumWidth=(48*d).toInt();minimumHeight=(48*d).toInt()
+            contentDescription=when(label) { "Dup" -> "Duplicate layer"; "Dn" -> "Move layer down"; "Up" -> "Move layer up"; "X" -> "Delete layer"; else -> label }
             setPadding((d * 12).toInt(), (d * 4).toInt(), (d * 12).toInt(), (d * 4).toInt())
             setOnClickListener { onClick(); Springs.pulse(this) }
         }
@@ -197,7 +199,7 @@ class LayersPanel(
                 gravity = Gravity.CENTER_VERTICAL
             }
             if (index == document.activeLayerIndex) {
-                setBackgroundColor(0x152E66F6) // active sheet highlight
+                row.setBackgroundColor(0x152E66F6) // active sheet highlight
             }
 
             row.addView(RadioButton(context).apply {
@@ -214,7 +216,7 @@ class LayersPanel(
             row.setOnLongClickListener {
                 row.tag = index
                 val clip = ClipData("layer", arrayOf("text/plain"), ClipData.Item(""))
-                row.startDragAndDrop(clip, View.DragShadowBuilder(row), row, 0)
+                row.startDragAndDrop(clip, View.DragShadowBuilder(row), index, 0)
                 true
             }
 
@@ -222,6 +224,8 @@ class LayersPanel(
                 text = (if (layer.locked) "\uD83D\uDD12 " else "") + layer.name +
                     if (layer.strokes.isEmpty()) "" else " (" + layer.strokes.size + ")"
                 setTextColor(GlassStyle.TEXT_PRIMARY)
+                maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
+                minimumHeight=(48*resources.displayMetrics.density).toInt();gravity=Gravity.CENTER_VERTICAL
                 contentDescription = "rename " + layer.name
                 setOnClickListener { showRenameDialog(index, layer) }
             }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
@@ -236,49 +240,55 @@ class LayersPanel(
                 }
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            row.addView(compactButton(if (layer.locked) "Unlock" else "Lock") {
+            val actions=LinearLayout(context).apply { orientation=HORIZONTAL }
+            actions.addView(compactButton(if (layer.locked) "Unlock" else "Lock") {
                 doc().setLayerLocked(index, !layer.locked)
                 refresh()
                 view.requestSceneRepaint()
                 onChanged()
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            row.addView(compactButton("Dup") {
+            actions.addView(compactButton("Dup") {
                 doc().duplicateLayer(index)
                 refresh()
                 view.requestSceneRepaint()
                 onChanged()
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            row.addView(compactButton(blendLabel(layer.blend)) {
+            actions.addView(compactButton(blendLabel(layer.blend)) {
                 doc().setLayerBlend(index, layer.blend.cycled())
                 refresh()
                 view.requestSceneRepaint()
                 onChanged()
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            row.addView(compactButton("Up") {
+            actions.addView(compactButton("Up") {
                 doc().moveLayer(index, index - 1)
                 refresh()
                 view.requestSceneRepaint()
                 onChanged()
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            row.addView(compactButton("Dn") {
+            actions.addView(compactButton("Dn") {
                 doc().moveLayer(index, index + 1)
                 refresh()
                 view.requestSceneRepaint()
                 onChanged()
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            row.addView(compactButton("X") {
+            actions.addView(compactButton("X") {
                 doc().removeLayer(index)
                 refresh()
                 view.requestSceneRepaint()
                 onChanged()
             }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
 
-            listContainer.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+            val card=LinearLayout(context).apply {
+                orientation=VERTICAL
+                addView(row,LayoutParams(-1,-2))
+                addView(android.widget.HorizontalScrollView(context).apply { addView(actions) },LayoutParams(-1,-2))
+            }
+            listContainer.addView(card, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
             val opacityRow = LinearLayout(context).apply {
                 orientation = HORIZONTAL

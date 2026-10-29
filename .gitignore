@@ -9,3 +9,15 @@ captures/
 
 # Local working backups - redundant with git history
 .uibackup/
+
+# Local device evidence includes private artwork backups
+cache_devicetest/
+baseline_tests.log
+review_baseline.log
+review_validation.log
+.serena/
+
+atelier_validation.log
+atelier_tests.log
+
+release_*.log

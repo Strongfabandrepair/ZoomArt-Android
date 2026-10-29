@@ -13,6 +13,16 @@ import java.util.IdentityHashMap
  * the grid.
  */
 class StrokeIndex(private val cellSize: Float = 512f) {
+    init { require(cellSize.isFinite() && cellSize > 0f) }
+
+    private fun manageableSpan(x0: Int, x1: Int, y0: Int, y1: Int): Boolean {
+        val w = x1.toLong() - x0.toLong() + 1L
+        val h = y1.toLong() - y0.toLong() + 1L
+        return w in 1..MAX_CELLS && h in 1..MAX_CELLS && w * h <= MAX_CELLS
+    }
+
+    private fun padding(s: StrokeData): Float =
+        s.brush.baseWidthWorld.coerceAtLeast(0f) + s.brush.scatterWorld.coerceAtLeast(0f)
 
     private class Buckets {
         val cells = HashMap<Long, MutableList<StrokeData>>()
@@ -37,11 +47,10 @@ class StrokeIndex(private val cellSize: Float = 512f) {
         owners[stroke] = layer
         levelOf[stroke] = stroke.levelId
         val buckets = bucketsFor(stroke.levelId)
-        val minX = cellOf(stroke.minX); val maxX = cellOf(stroke.maxX)
-        val minY = cellOf(stroke.minY); val maxY = cellOf(stroke.maxY)
-        val spanX = (maxX - minX + 1).toLong()
-        val spanY = (maxY - minY + 1).toLong()
-        if (spanX * spanY > MAX_CELLS) {
+        val pad = padding(stroke)
+        val minX = cellOf(stroke.minX - pad); val maxX = cellOf(stroke.maxX + pad)
+        val minY = cellOf(stroke.minY - pad); val maxY = cellOf(stroke.maxY + pad)
+        if (!manageableSpan(minX, maxX, minY, maxY)) {
             buckets.oversize.add(stroke)
             return
         }
@@ -60,8 +69,14 @@ class StrokeIndex(private val cellSize: Float = 512f) {
     fun remove(stroke: StrokeData) {
         val levelId = levelOf.remove(stroke) ?: return
         val buckets = levels[levelId]
-        cellsOf.remove(stroke)?.forEach { k -> buckets?.cells?.get(k)?.remove(stroke) }
+        cellsOf.remove(stroke)?.forEach { k ->
+            buckets?.cells?.get(k)?.let { list ->
+                list.remove(stroke)
+                if (list.isEmpty()) buckets.cells.remove(k)
+            }
+        }
         buckets?.oversize?.remove(stroke)
+        if (buckets != null && buckets.cells.isEmpty() && buckets.oversize.isEmpty()) levels.remove(levelId)
         owners.remove(stroke)
     }
 
@@ -106,7 +121,7 @@ class StrokeIndex(private val cellSize: Float = 512f) {
         val seen = LinkedHashMap<StrokeData, LayerData>()
         val cx0 = cellOf(minX); val cx1 = cellOf(maxX)
         val cy0 = cellOf(minY); val cy1 = cellOf(maxY)
-        if ((cx1 - cx0 + 1).toLong() * (cy1 - cy0 + 1).toLong() <= MAX_CELLS) {
+        if (manageableSpan(cx0, cx1, cy0, cy1)) {
             for (cy in cy0..cy1) {
                 for (cx in cx0..cx1) {
                     buckets.cells[key(cx, cy)]?.let { list ->
@@ -119,11 +134,16 @@ class StrokeIndex(private val cellSize: Float = 512f) {
             buckets.cells.values.forEach { list -> for (s in list) seen[s] = owners[s]!! }
         }
         for (s in buckets.oversize) {
-            if (s.maxX >= minX && s.minX <= maxX && s.maxY >= minY && s.minY <= maxY) {
+            val pad = padding(s)
+            if (s.maxX + pad >= minX && s.minX - pad <= maxX && s.maxY + pad >= minY && s.minY - pad <= maxY) {
                 seen[s] = owners[s]!!
             }
         }
-        return seen.map { it.key to it.value }
+        // Grid buckets are broad-phase only. Cull their offscreen neighbours too.
+        return seen.filterKeys { s ->
+            val pad=padding(s)
+            s.maxX+pad>=minX && s.minX-pad<=maxX && s.maxY+pad>=minY && s.minY-pad<=maxY
+        }.map { it.key to it.value }
     }
 
     private companion object {

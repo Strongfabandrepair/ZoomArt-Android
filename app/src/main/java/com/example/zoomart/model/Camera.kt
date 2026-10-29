@@ -203,30 +203,25 @@ class Camera(
      */
     fun transformTo(target: ZoomLevel): FloatArray {
         if (target === level) return floatArrayOf(scale, transX, transY)
-        var kx = 1f; var cx = 0f
-        var ky = 1f; var cy = 0f
-        if (isAncestorOfCamera(target)) {
-            var a = target
-            while (a !== level) {
-                val child = childToward(a)
-                kx *= child.scaleToParent
-                ky *= child.scaleToParent
-                cx = (cx - child.originX) * child.scaleToParent
-                cy = (cy - child.originY) * child.scaleToParent
-                a = child
-            }
-        } else {
-            var d = target
-            while (d !== level) {
-                val s = d.scaleToParent
-                kx /= s
-                ky /= s
-                cx = d.originX + cx / s
-                cy = d.originY + cy / s
-                d = d.parent!!
-            }
+        val ancestors = generateSequence(level) { it.parent }.toSet()
+        val targetPath = mutableListOf<ZoomLevel>()
+        var common = target
+        while (common !in ancestors) {
+            targetPath.add(common)
+            common = requireNotNull(common.parent) { "Levels belong to different trees" }
         }
-        return floatArrayOf(kx * scale, cx * scale + transX, cy * scale + transY)
+        var k = scale.toDouble(); var x = transX.toDouble(); var y = transY.toDouble()
+        var node = level
+        while (node !== common) {
+            k *= node.scaleToParent
+            x -= node.originX * k; y -= node.originY * k
+            node = checkNotNull(node.parent)
+        }
+        for (child in targetPath.asReversed()) {
+            x += child.originX * k; y += child.originY * k
+            k /= child.scaleToParent
+        }
+        return floatArrayOf(k.toFloat(), x.toFloat(), y.toFloat())
     }
 
     /**
@@ -263,14 +258,9 @@ class Camera(
      *
      * Same level: translation interpolates linearly (legacy, exact).
      *
-     * Cross-level (P1.3a): the flight is computed in ROOT Double space and
-     * decomposed onto a level of the source->target path per frame — the
-     * on-screen magnification of root units lerps in log space and the root
-     * point under the screen origin lerps linearly, so the camera glides
-     * across level boundaries with no hold and no hop. Each frame picks the
-     * path level whose implied localScale falls in [1, THRESHOLD), which
-     * keeps float precision safe at any depth (adjacent path levels differ
-     * by exactly scaleToParent, so exactly one level can match).
+     * Cross-level: logarithmic magnification and decimal coordinates relative
+     * to the common ancestor avoid overflowing deep root-space doubles.
+     * Each frame chooses a level along the flight path with a stable local scale.
      *
      * [animateToBookmark] and the MP4 pin-tour exporter both ride this.
      */
@@ -279,46 +269,56 @@ class Camera(
         if (c <= 0f) return Camera(scale, transX, transY, level)
         if (c >= 1f) return Camera(other.scale, other.transX, other.transY, other.level)
         if (other.level === level) {
-            val ratio = (other.scale / scale).toDouble()
+            val ratio = other.scale.toDouble() / scale.toDouble()
             return Camera(
-                scale = scale * Math.pow(ratio, c.toDouble()).toFloat(),
-                transX = transX + (other.transX - transX) * c,
-                transY = transY + (other.transY - transY) * c,
+                scale = (scale.toDouble() * Math.pow(ratio, c.toDouble())).toFloat(),
+                transX = (transX.toDouble() + (other.transX.toDouble() - transX) * c).toFloat(),
+                transY = (transY.toDouble() + (other.transY.toDouble() - transY) * c).toFloat(),
                 level = level,
             )
         }
-        if (other.level.tree !== level.tree) {
-            // Defensive: foreign trees cannot be composed; degrade to the old
-            // midpoint hop so callers never crash.
-            if (c < 0.5f) return Camera(scale, transX, transY, level)
-            val hop = Camera(scale, transX, transY, level)
-            hop.snapToLevel(other.level, 0f, 0f)
-            val uc = (c - 0.5f) * 2f
-            val ratio = (other.scale / hop.scale).toDouble()
-            return Camera(
-                scale = hop.scale * Math.pow(ratio, uc.toDouble()).toFloat(),
-                transX = hop.transX + (other.transX - hop.transX) * uc,
-                transY = hop.transY + (other.transY - hop.transY) * uc,
-                level = other.level,
-            )
+        if (other.level.tree !== level.tree) return if (c < 0.5f)
+            Camera(scale,transX,transY,level) else Camera(other.scale,other.transX,other.transY,other.level)
+        // Log magnification never forms 100^depth, and decimal coordinates retain
+        // small offsets below deep common ancestors instead of rounding them away.
+        val logs=mutableMapOf<ZoomLevel,Double>()
+        fun logScale(node: ZoomLevel): Double {
+            val chain=generateSequence(node) { it.parent }.takeWhile { it !in logs }.toList()
+            for(entry in chain.asReversed()) logs[entry] = if(entry.parent==null) 0.0
+                else logs.getValue(entry.parent!!)+kotlin.math.ln(entry.scaleToParent.toDouble())
+            return logs.getValue(node)
         }
-        // Log-space interpolation of the root->screen magnification…
-        val magFrom = scale.toDouble() * level.chainScaleProduct()
-        val magTo = other.scale.toDouble() * other.level.chainScaleProduct()
-        val mag = magFrom * Math.pow(magTo / magFrom, c.toDouble())
-        // …and a linear root-space lerp of the point pinned under (0,0).
-        val ax = localToRootX(level, screenToLocalX(0f))
-        val ay = localToRootY(level, screenToLocalY(0f))
-        val bx = localToRootX(other.level, other.screenToLocalX(0f))
-        val by = localToRootY(other.level, other.screenToLocalY(0f))
-        val rootX = ax + (bx - ax) * c
-        val rootY = ay + (by - ay) * c
-        // Decompose: pick the path level whose localScale lands in [1,100).
-        val target = flightLevelFor(mag, other.level)
-        val localScale = (mag / target.chainScaleProduct()).toFloat()
-        val lx = rootToLocalX(target, rootX)
-        val ly = rootToLocalY(target, rootY)
-        return Camera(localScale, -lx * localScale, -ly * localScale, target)
+        val logFrom=kotlin.math.ln(scale.toDouble())+logScale(level)
+        val logTo=kotlin.math.ln(other.scale.toDouble())+logScale(other.level)
+        val logMag=logFrom+(logTo-logFrom)*c
+        val path=flightPathTo(other.level)
+        val target=path.minBy { node ->
+            val local=logMag-logScale(node)
+            if(local>=0 && local<kotlin.math.ln(ZoomLevels.THRESHOLD.toDouble())) 0.0
+            else kotlin.math.abs(local-kotlin.math.ln(10.0))
+        }
+        val common=path.minBy { it.depth }
+        val precision=java.math.MathContext(4096,java.math.RoundingMode.HALF_EVEN)
+        fun decimal(value: Double)=java.math.BigDecimal.valueOf(value)
+        fun coordinate(camera: Camera, x: Boolean): java.math.BigDecimal {
+            var node=camera.level
+            var value=decimal(-(if(x) camera.transX else camera.transY).toDouble()).divide(decimal(camera.scale.toDouble()),precision)
+            while(node !== common) {
+                value=value.divide(decimal(node.scaleToParent.toDouble()),precision)
+                    .add(decimal((if(x) node.originX else node.originY).toDouble()),precision)
+                node=checkNotNull(node.parent)
+            }
+            return value
+        }
+        fun local(x: Boolean): Float {
+            val start=coordinate(this,x);val end=coordinate(other,x)
+            var value=start.add(end.subtract(start,precision).multiply(decimal(c.toDouble()),precision),precision)
+            val down=generateSequence(target) { it.parent }.takeWhile { it !== common }.toList().asReversed()
+            for(node in down) value=value.subtract(decimal((if(x) node.originX else node.originY).toDouble()),precision)
+                .multiply(decimal(node.scaleToParent.toDouble()),precision)
+            return value.multiply(decimal(kotlin.math.exp(logMag-logScale(target))),precision).negate().toFloat()
+        }
+        return Camera(kotlin.math.exp(logMag-logScale(target)).toFloat(),local(true),local(false),target)
     }
 
     /**

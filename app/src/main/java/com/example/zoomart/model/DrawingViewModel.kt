@@ -236,9 +236,13 @@ class DrawingViewModel(
 
     var eraserRadiusWorld = 40f
     private val eraseCenters = mutableListOf<StrokePoint>()
+    private var eraseBefore: List<StrokeData>? = null
+    private var eraseLayer: LayerData? = null
     private val erasePairs = mutableListOf<Pair<StrokeData, List<StrokeData>>>()
 
     fun beginErase(worldX: Float, worldY: Float) {
+        eraseLayer = document.activeLayer
+        eraseBefore = document.activeLayer.strokes.toList()
         eraseCenters.clear()
         erasePairs.clear()
         eraseCenters.add(StrokePoint(worldX, worldY, 0f))
@@ -257,9 +261,12 @@ class DrawingViewModel(
      * exact pre-P4 math. P2.2: a locked layer rejects the eraser entirely.
      */
     fun eraseTo(worldX: Float, worldY: Float): Boolean {
+        if (eraseLayer != null && eraseLayer !== document.activeLayer) { cancelGesture();return false }
         val layer = document.activeLayer
         if (layer.locked) return false
         eraseCenters.add(StrokePoint(worldX, worldY, 0f))
+        // Only the newest sweep is new work; previous sweeps are already applied.
+        val sweep = eraseCenters.takeLast(2)
         val cam = camera
         // screen-constant eraser: the radius in CAMERA-local units
         val radiusCam = eraserRadiusWorld / cam.scale
@@ -267,7 +274,7 @@ class DrawingViewModel(
         // the cheap pre-filter before any per-level conversion
         var pMinX = Float.MAX_VALUE; var pMinY = Float.MAX_VALUE
         var pMaxX = -Float.MAX_VALUE; var pMaxY = -Float.MAX_VALUE
-        for (c in eraseCenters) {
+        for (c in sweep) {
             pMinX = minOf(pMinX, c.x); pMinY = minOf(pMinY, c.y)
             pMaxX = maxOf(pMaxX, c.x); pMaxY = maxOf(pMaxY, c.y)
         }
@@ -289,22 +296,20 @@ class DrawingViewModel(
             val sMinY = stroke.minY * kk + oy
             val sMaxX = stroke.maxX * kk + ox
             val sMaxY = stroke.maxY * kk + oy
-            if (sMaxX < pMinX || sMinX > pMaxX || sMaxY < pMinY || sMinY > pMaxY) continue
+            val inkPadding = stroke.brush.baseWidthWorld * kk * 0.5f
+            if (sMaxX + inkPadding < pMinX || sMinX - inkPadding > pMaxX ||
+                sMaxY + inkPadding < pMinY || sMinY - inkPadding > pMaxY) continue
             // convert only the centers that can possibly reach this stroke
             val radiusLvl = radiusCam * cam.scale / k
             val centers = ArrayList<StrokePoint>(eraseCenters.size)
-            for (c in eraseCenters) {
+            for (c in sweep) {
                 val lx = (cam.localToScreenX(c.x) - t[1]) / k
                 val ly = (cam.localToScreenY(c.y) - t[2]) / k
-                if (lx + radiusLvl >= stroke.minX && lx - radiusLvl <= stroke.maxX &&
-                    ly + radiusLvl >= stroke.minY && ly - radiusLvl <= stroke.maxY
-                ) {
-                    centers.add(StrokePoint(lx, ly, 0f))
-                }
+                centers.add(StrokePoint(lx, ly, 0f))
             }
             if (centers.isEmpty()) continue
             val fragments = StrokeEraser.erase(stroke, centers, radiusLvl)
-            val erased = fragments.size != 1 || fragments[0].points.size != stroke.points.size
+            val erased = fragments.size != 1 || fragments[0] !== stroke
             if (erased && document.replaceStrokeDirect(layer, stroke, fragments)) {
                 erasePairs.add(stroke to fragments)
                 changed = true
@@ -313,8 +318,17 @@ class DrawingViewModel(
         return changed
     }
 
+    fun cancelGesture() {
+        inProgress=null; inProgressShape=null; inProgressSmudge=null; lazyBrush.end()
+        eraseBefore?.let { before -> eraseLayer?.let { layer -> layer.strokes.clear();layer.strokes.addAll(before);document.reindex() } }
+        eraseBefore=null;eraseLayer=null;erasePairs.clear();eraseCenters.clear()
+        document.selection.cancelTransform()
+    }
+
     fun endErase() {
-        document.recordAppliedErase(document.activeLayer, erasePairs.toList())
+        val layer=eraseLayer ?: document.activeLayer
+        eraseBefore=null;eraseLayer=null
+        document.recordAppliedErase(layer, erasePairs.toList())
         eraseCenters.clear()
         erasePairs.clear()
     }

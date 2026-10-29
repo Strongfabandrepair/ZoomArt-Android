@@ -37,6 +37,7 @@ import com.example.zoomart.ui.glass.Springs
 class TitleActivity : AppCompatActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private lateinit var resumeButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +54,8 @@ class TitleActivity : AppCompatActivity() {
             )
             setBackgroundColor(Brand.BACKGROUND)
         }
+
+        root.addView(com.example.zoomart.ui.StudioBackdrop(this), FrameLayout.LayoutParams(-1, -1))
 
         // Centered branded glass card. Caps width at 520dp so it stays
         // readable on both the Note 8 (1440 wide) and Tab S9 FE (2304 wide).
@@ -84,7 +87,7 @@ class TitleActivity : AppCompatActivity() {
 
         // ---- Brand icon (large, top of card) ----
         val brandIcon = ImageView(this).apply {
-            setImageResource(R.drawable.zoomart_icon_512)
+            setImageResource(R.drawable.ic_studio_mark)
             val iconSize = (density * 110).toInt()
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             setPadding(0, 0, 0, (density * 16).toInt())
@@ -92,7 +95,7 @@ class TitleActivity : AppCompatActivity() {
         col.addView(brandIcon)
 
         val title = TextView(this).apply {
-            text = "ZoomArt"
+            text = getString(R.string.app_name)
             textSize = 40f
             setTextColor(Brand.WHITE)
             typeface = android.graphics.Typeface.create(
@@ -102,7 +105,7 @@ class TitleActivity : AppCompatActivity() {
         col.addView(title)
 
         val subtitle = TextView(this).apply {
-            text = "Infinite zoom canvas"
+            text = getString(R.string.brand_tagline)
             textSize = 15f
             setTextColor(GlassStyle.TEXT_SECONDARY)
             setPadding(0, 0, 0, (density * 30).toInt())
@@ -112,8 +115,16 @@ class TitleActivity : AppCompatActivity() {
         val resumeBtn = brandButton("Resume Project", R.drawable.ic_resume) {
             openResume()
         }
+        resumeButton = resumeBtn
         val newBtn = brandButton("Start New", R.drawable.ic_new) {
-            openCanvas(resume = false)
+            if (AppSettings.hasResumeableSession(this)) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Start a new drawing?")
+                    .setMessage("Your current drawing will be backed up on this device. Resume opens only the most recent drawing.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Start new") { _, _ -> openCanvas(resume = false) }
+                    .show()
+            } else openCanvas(resume = false)
         }
         val settingsBtn = brandButton("Settings", R.drawable.ic_settings) {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -126,21 +137,22 @@ class TitleActivity : AppCompatActivity() {
             ).apply { topMargin = (resources.displayMetrics.density * 10).toInt() })
         }
 
+        col.addView(brandButton(getString(R.string.project_library), R.drawable.ic_studio) {
+            startActivity(Intent(this, ProjectLibraryActivity::class.java))
+        })
         // Disable resume when there's nothing to resume.
         resumeBtn.isEnabled = AppSettings.hasResumeableSession(this)
         resumeBtn.alpha = if (resumeBtn.isEnabled) 1f else 0.5f
 
         card.addView(col)
         root.addView(card)
-        setContentView(root)
+        val page=android.widget.ScrollView(this).apply { isFillViewport=true;addView(root) }
+        setContentView(page)
+        WindowInsetsSupport.apply(page)
 
         // Spring the card in on show.
         mainHandler.postDelayed({
-            card.alpha = 0f
-            card.scaleX = 0.92f
-            card.scaleY = 0.92f
-            card.alpha = 1f
-            Springs.springScale(card, 1f)
+            Springs.showPop(card)
         }, 60L)
     }
 
@@ -154,7 +166,7 @@ class TitleActivity : AppCompatActivity() {
             setCompoundDrawablePadding((resources.displayMetrics.density * 8).toInt())
             GlassStyle.button(this)
             Springs.attachPressFeedback(this)
-            setOnClickListener { onClick() }
+            setOnClickListener { Springs.pulse(this); onClick() }
             minHeight = (resources.displayMetrics.density * 50).toInt()
             setAllCaps(false)
             setTextColor(Brand.WHITE)
@@ -166,7 +178,21 @@ class TitleActivity : AppCompatActivity() {
         intent.putExtra("zoomart.mode", "resume")
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
-        overridePendingTransition(0, 0)
+        overridePendingTransition(if (Springs.enabled()) android.R.anim.fade_in else 0,
+            if (Springs.enabled()) android.R.anim.fade_out else 0)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::resumeButton.isInitialized) {
+            resumeButton.isEnabled = AppSettings.hasResumeableSession(this)
+            resumeButton.alpha = if (resumeButton.isEnabled) 1f else 0.5f
+        }
+    }
+
+    override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     private fun openCanvas(resume: Boolean) {
@@ -174,7 +200,8 @@ class TitleActivity : AppCompatActivity() {
         intent.putExtra("zoomart.mode", if (resume) "resume" else "new")
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
-        overridePendingTransition(0, 0)
+        overridePendingTransition(if (Springs.enabled()) android.R.anim.fade_in else 0,
+            if (Springs.enabled()) android.R.anim.fade_out else 0)
     }
 
     @SuppressLint("SetTextI18n")

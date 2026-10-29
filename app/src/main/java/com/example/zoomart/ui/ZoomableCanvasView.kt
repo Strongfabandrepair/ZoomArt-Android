@@ -87,7 +87,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
 
     /** v0.7.0: canvas rotation in degrees, applied in onDraw. Two-finger rotate gesture. */
     var canvasRotationDegrees: Float = 0f
-        private set
+        internal set
 
     /** Last two-finger angle for rotation delta tracking. */
     private var lastRotateAngle: Float? = null
@@ -95,6 +95,8 @@ class ZoomableCanvasView @JvmOverloads constructor(
     val viewModel = DrawingViewModel()
 
     var tool: Tool = Tool.DRAW
+    /** Opt-in phone workflow: one finger draws; a second finger cancels the mark and navigates. */
+    var fingerDrawingEnabled = false
     var onStateChanged: (() -> Unit)? = null
     var onEyedrop: ((Int) -> Unit)? = null
     var onCameraLevelChanged: ((Int) -> Unit)? = null
@@ -178,7 +180,15 @@ class ZoomableCanvasView @JvmOverloads constructor(
     }
 
     private val scratchPath = Path()
-    private val imageCache = HashMap<String, Bitmap?>()
+    private data class CachedOutline(val revision: Long, val taper: Float, val path: Path, val bytes: Int, val firstRadius: Float, val lastRadius: Float)
+    private val outlineCache = object : android.util.LruCache<StrokeData, CachedOutline>(
+        (Runtime.getRuntime().maxMemory() / 12).coerceIn(8L * 1024 * 1024, 32L * 1024 * 1024).toInt()) {
+        override fun sizeOf(key: StrokeData, value: CachedOutline): Int = value.bytes
+    }
+
+    private val imageCache = object : android.util.LruCache<String, Bitmap>(32 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
+    }
 
     // ----- P3 render paints -----
     private val shapeFillPaint = Paint().apply {
@@ -303,6 +313,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
     private var demoLegIndex = 0
     private var demoTargets: List<ZoomLevel>? = null
     private var demoAnimator: ValueAnimator? = null
+    private var bookmarkAnimator: ValueAnimator? = null
 
     // ----- P4.2: two-finger pinch rotation of the selection -----
     /** Inter-pointer angle of the current SELECT pinch, or null. */
@@ -332,8 +343,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 viewModel.inProgressShape = null   // ...and P3 shape/smudge gestures
                 viewModel.inProgressSmudge = null
                 scroller.forceFinished(true)      // gesture overrides inertia
-                lastFocusX = detector.focusX
-                lastFocusY = detector.focusY
+                val focus = unrotateScreen(detector.focusX, detector.focusY)
+                lastFocusX = focus[0]
+                lastFocusY = focus[1]
                 return true
             }
 
@@ -344,11 +356,12 @@ class ZoomableCanvasView @JvmOverloads constructor(
                     return true
                 }
                 val cam = viewModel.camera
-                cam.panBy(detector.focusX - lastFocusX, detector.focusY - lastFocusY)
-                lastFocusX = detector.focusX
-                lastFocusY = detector.focusY
-                cam.zoomAt(detector.focusX, detector.focusY, cam.scale * detector.scaleFactor)
-                if (cam.applyLevelTransitions(detector.focusX, detector.focusY)) {
+                val focus = unrotateScreen(detector.focusX, detector.focusY)
+                cam.panBy(focus[0] - lastFocusX, focus[1] - lastFocusY)
+                lastFocusX = focus[0]
+                lastFocusY = focus[1]
+                cam.zoomAt(focus[0], focus[1], cam.scale * detector.scaleFactor)
+                if (cam.applyLevelTransitions(focus[0], focus[1])) {
                     Log.i(TAG, "camera level -> depth " + cam.level.depth +
                         " (scale " + cam.scale + ", zoom " + cam.rootMagnification() + ")")
                     onCameraLevelChanged?.invoke(cam.level.depth)
@@ -412,6 +425,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
     private var isDrawing = false
 
     // ----- P1.1 input-routing state -----
+    private var activePenId = -1
     private var penGesture = false             // active tool gesture came from stylus/eraser
     private var gestureTool: Tool = Tool.DRAW  // tool captured at gesture start
     private var fingerPanning = false         // a single finger is panning the camera
@@ -448,6 +462,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 // P3.2: DRAW always enters through the SCREEN-space API so
                 // the lazy rope (screen px) can feed the committed points.
                 viewModel.beginStrokeAtScreen(x, y, pressure)
+                lastPenScreenX=x;lastPenScreenY=y
                 isDrawing = true
             }
             Tool.ERASE -> {
@@ -609,14 +624,26 @@ class ZoomableCanvasView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun cancelActiveGesture() {
+        viewModel.cancelGesture()
+        smudgeSnapshot?.recycle();smudgeSnapshot=null
+        isDrawing=false;penGesture=false;activePenId=-1;fingerPanning=false;pinPending=false
+        isTransformingSelection=false;resizingCorner=-1;marqueeWorld=null;lastRotateAngle=null
+        ignoredPalmIds.clear();scroller.forceFinished(true)
+        onCanvasActivityChanged?.invoke(false);invalidate()
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val cam = viewModel.camera
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 // P4.5: ANY touch cancels the in-flight demo tour
                 if (demoActive) cancelDemo()
-                penGesture = isPenEvent(event)
+                bookmarkAnimator?.cancel()
+                scroller.forceFinished(true)
+                penGesture = isPenEvent(event) || fingerDrawingEnabled
                 if (penGesture) {
+                    activePenId = event.getPointerId(0)
                     fingerPanning = false
                     val uv = unrotateScreen(event.x, event.y)
                     startPenGesture(
@@ -625,7 +652,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                     )
                     // Long-press to drop a pin (replaces the too-sensitive double-tap).
                     // Armed only when a pen gesture started; cancelled on move/lift.
-                    if (penGesture && gestureTool != Tool.EYEDROPPER) {
+                    if (penGesture && isPenEvent(event) && gestureTool == Tool.DRAW) {
                         lastPinScreenX = event.x
                         lastPinScreenY = event.y
                         pinDownTime = SystemClock.uptimeMillis()
@@ -643,6 +670,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 val idx = event.actionIndex
                 if (isPenEvent(event, idx)) {
                     if (isDrawing) return true // a second pen never joins a gesture
+                    activePenId = event.getPointerId(idx)
                     fingerPanning = false
                     val uv = unrotateScreen(event.getX(idx), event.getY(idx))
                     startPenGesture(
@@ -651,15 +679,27 @@ class ZoomableCanvasView @JvmOverloads constructor(
                     )
                     return true // pen pointers stay out of the pinch detector
                 }
-                if (isDrawing && penGesture) {
+                val activeIndex = event.findPointerIndex(activePenId)
+                if (isDrawing && penGesture && activeIndex >= 0 && isPenEvent(event, activeIndex)) {
                     // palm rejection: a finger while the pen works is ignored
                     ignoredPalmIds.add(event.getPointerId(idx))
                     return true
+                }
+                if (isDrawing) {
+                    // Erasing and transforms modify existing objects live: preserve their undo step.
+                    if (gestureTool == Tool.ERASE) viewModel.endErase()
+                    if (gestureTool == Tool.SELECT) viewModel.document.selection.endTransform()
+                    isTransformingSelection = false
+                    marqueeWorld = null
+                    smudgeSnapshot?.recycle()
+                    smudgeSnapshot = null
                 }
                 viewModel.inProgress = null
                 viewModel.inProgressShape = null
                 viewModel.inProgressSmudge = null
                 isDrawing = false
+                penGesture = false
+                onCanvasActivityChanged?.invoke(false)
                 fingerPanning = false
                 tapDetector.onTouchEvent(event)
                 scaleDetector.onTouchEvent(event)
@@ -670,33 +710,34 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
+                val penIndex = event.findPointerIndex(activePenId)
                 // a moving pen is drawing, not holding for a pin — cancel pending pin
-                if (pinPending && isPenEvent(event)) {
-                    val dx = abs(event.x - lastPinScreenX)
-                    val dy = abs(event.y - lastPinScreenY)
+                if (pinPending && penIndex >= 0) {
+                    val dx = abs(event.getX(penIndex) - lastPinScreenX)
+                    val dy = abs(event.getY(penIndex) - lastPinScreenY)
                     if (kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat() > pinMoveThresholdDp * resources.displayMetrics.density) {
                         pinPending = false
                     }
                 }
-                if (isDrawing && penGesture) {
+                if (isDrawing && penGesture && penIndex >= 0) {
                     when (gestureTool) {
                         Tool.DRAW -> {
                             for (i in 0 until event.historySize) {
                                 val uv = unrotateScreen(
-                                    event.getHistoricalX(i), event.getHistoricalY(i))
+                                    event.getHistoricalX(penIndex, i), event.getHistoricalY(penIndex, i))
                                 viewModel.extendStrokeAtScreen(
                                     uv[0], uv[1],
-                                    pressure01(event.getHistoricalPressure(i)),
+                                    pressure01(event.getHistoricalPressure(penIndex, i)),
                                 )
                             }
-                            val uv = unrotateScreen(event.x, event.y)
+                            val uv = unrotateScreen(event.getX(penIndex), event.getY(penIndex))
                             viewModel.extendStrokeAtScreen(
-                                uv[0], uv[1], pressure01(event.pressure))
+                                uv[0], uv[1], pressure01(event.getPressure(penIndex)))
                             lastPenScreenX = uv[0]
                             lastPenScreenY = uv[1]
                         }
                         Tool.ERASE -> {
-                            val uv = unrotateScreen(event.x, event.y)
+                            val uv = unrotateScreen(event.getX(penIndex), event.getY(penIndex))
                             lastEraserScreenX = uv[0]
                             lastEraserScreenY = uv[1]
                             viewModel.eraseTo(
@@ -706,7 +747,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                         }
                         Tool.SHAPE -> {
                             // P3.1: rubber-band the preview to the pen
-                            val uv = unrotateScreen(event.x, event.y)
+                            val uv = unrotateScreen(event.getX(penIndex), event.getY(penIndex))
                             viewModel.extendShapeGesture(
                                 cam.screenToLocalX(uv[0]),
                                 cam.screenToLocalY(uv[1]),
@@ -714,16 +755,17 @@ class ZoomableCanvasView @JvmOverloads constructor(
                         }
                         Tool.SMUDGE -> {
                             // P3.3: sample + carry + deposit along the drag
-                            val uv = unrotateScreen(event.x, event.y)
+                            val uv = unrotateScreen(event.getX(penIndex), event.getY(penIndex))
                             viewModel.extendSmudge(
-                                uv[0], uv[1], pressure01(event.pressure), smudgeSampler())
+                                uv[0], uv[1], pressure01(event.getPressure(penIndex)), smudgeSampler())
                         }
                         Tool.SELECT -> {
+                            val selectionPoint = unrotateScreen(event.getX(penIndex), event.getY(penIndex))
                             if (resizingCorner >= 0 && isTransformingSelection) {
                                 // P3.1: corner resize — incremental uniform
                                 // scale about the opposite corner
                                 val newDist = dist(
-                                    event.x, event.y, resizePivotScreenX, resizePivotScreenY)
+                                    selectionPoint[0], selectionPoint[1], resizePivotScreenX, resizePivotScreenY)
                                 if (lastResizePenDist > 1f && newDist > 1f) {
                                     val factor = newDist / lastResizePenDist
                                     viewModel.document.selection.scaleAboutCameraPoint(
@@ -734,20 +776,20 @@ class ZoomableCanvasView @JvmOverloads constructor(
                                     lastResizePenDist = newDist
                                 }
                             } else if (isTransformingSelection) {
-                                val dx = cam.screenToLocalX(event.x) -
+                                val dx = cam.screenToLocalX(selectionPoint[0]) -
                                     cam.screenToLocalX(lastSelScreenX)
-                                val dy = cam.screenToLocalY(event.y) -
+                                val dy = cam.screenToLocalY(selectionPoint[1]) -
                                     cam.screenToLocalY(lastSelScreenY)
                                 viewModel.document.selection.translateBy(dx, dy)
                             } else {
                                 val m = marqueeWorld
                                 if (m != null) {
-                                    m[2] = cam.screenToLocalX(event.x)
-                                    m[3] = cam.screenToLocalY(event.y)
+                                    m[2] = cam.screenToLocalX(selectionPoint[0])
+                                    m[3] = cam.screenToLocalY(selectionPoint[1])
                                 }
                             }
-                            lastSelScreenX = event.x
-                            lastSelScreenY = event.y
+                            lastSelScreenX = selectionPoint[0]
+                            lastSelScreenY = selectionPoint[1]
                         }
                         Tool.EYEDROPPER -> { }
                     }
@@ -759,7 +801,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
                     lastFingerX = event.x
                     lastFingerY = event.y
                     if (dx != 0f || dy != 0f) {
-                        cam.panBy(dx, dy)
+                        val from = unrotateScreen(event.x - dx, event.y - dy)
+                        val to = unrotateScreen(event.x, event.y)
+                        cam.panBy(to[0] - from[0], to[1] - from[1])
                         invalidate()
                     }
                     tapDetector.onTouchEvent(event)
@@ -785,7 +829,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                         val ang = kotlin.math.atan2(
                             (event.getY(1) - event.getY(0)).toDouble(),
                             (event.getX(1) - event.getX(0)).toDouble(),
-                        ).toFloat()
+                        ).let { Math.toDegrees(it).toFloat() }
                         val last = pinchAngle
                         if (last == null) {
                             pinchAngle = ang
@@ -826,7 +870,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 tapDetector.onTouchEvent(event)
                 scaleDetector.onTouchEvent(event)
                 // v0.7.0: reset rotation tracking when fingers drop below 2
-                if (event.pointerCount < 2) lastRotateAngle = null
+                if (event.pointerCount <= 2) lastRotateAngle = null
                 // a pinch survivor continues as the pan finger
                 if (!penGesture && !isDrawing && !scaleDetector.isInProgress) {
                     var remaining = -1
@@ -844,12 +888,27 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (isDrawing && penGesture) finishPenGesture()
+                if (event.actionMasked == MotionEvent.ACTION_UP && pinPending &&
+                    SystemClock.uptimeMillis() - pinDownTime >= pinLongPressDelay) {
+                    placePinAtLastPin()
+                }
+                if (event.actionMasked == MotionEvent.ACTION_CANCEL) cancelActiveGesture()
+                else if (isDrawing && penGesture) {
+                    val index=event.findPointerIndex(activePenId)
+                    if(index>=0 && gestureTool==Tool.DRAW) {
+                        val uv=unrotateScreen(event.getX(index),event.getY(index))
+                        if (uv[0] != lastPenScreenX || uv[1] != lastPenScreenY)
+                            viewModel.extendStrokeAtScreen(uv[0],uv[1],pressure01(event.getPressure(index)))
+                    }
+                    finishPenGesture()
+                }
+                onCanvasActivityChanged?.invoke(false)
+                activePenId = -1
+                lastRotateAngle = null
                 fingerPanning = false
                 penGesture = false
                 ignoredPalmIds.clear()
                 // Long-press pin: if the pen was held long enough, drop a pin on release.
-                if (pinPending) placePinAtLastPin()
                 pinPending = false
                 tapDetector.onTouchEvent(event)
                 scaleDetector.onTouchEvent(event)
@@ -875,7 +934,9 @@ class ZoomableCanvasView @JvmOverloads constructor(
             val dy = scroller.currY - lastFlingY
             lastFlingX = scroller.currX
             lastFlingY = scroller.currY
-            viewModel.camera.panBy(-dx.toFloat(), -dy.toFloat())
+            val from = unrotateScreen(0f, 0f)
+            val to = unrotateScreen(-dx.toFloat(), -dy.toFloat())
+            viewModel.camera.panBy(to[0] - from[0], to[1] - from[1])
             postInvalidateOnAnimation()
         }
     }
@@ -1065,259 +1126,108 @@ class ZoomableCanvasView @JvmOverloads constructor(
         canvas.drawCircle(lastEraserScreenX, lastEraserScreenY, r, eraserPreviewRingPaint)
     }
 
-    /**
-     * Level-composed scene draw, used by the screen, the eyedropper, PNG
-     * export and the MP4 encoder. [camera] must reference a level of the
-     * same tree as the document content (the viewModel camera always does).
-     *
-     * P2.3: layers are "stacked sheets of paper" — a layer's content spans
-     * ALL visible levels, and sheets composite in layer order. Two paths:
-     *  - All layers NORMAL (the common case): the pre-P2 LEVEL-MAJOR fast
-     *    path, byte-identical rendering with zero saveLayer overhead.
-     *  - Any visible layer non-NORMAL: the LAYER-MAJOR path — sheets in
-     *    stack order, each sheet's content drawn across every visible
-     *    level (ancestors first, children on top), and each non-NORMAL
-     *    sheet wrapped in canvas.saveLayer(null, paint-with-mode) so it
-     *    composites with its blend mode. Only blended sheets pay the
-     *    offscreen cost. Within one sheet its images draw under its
-     *    strokes (the pre-P2 per-layer convention).
+    /** Composes complete layers in stack order; translucent/blended layers use one offscreen sheet.
+     * The index culls candidates while document order controls overlapping strokes.
+     * Export callers use a detached snapshot and omit live gestures and bookmark chrome.
      */
     fun drawScene(
         canvas: Canvas,
         camera: Camera = viewModel.camera,
         includeInProgress: Boolean = true,
+        allDescendants: Boolean = false,
     ) {
+        val doc = viewModel.document
         val tree = camera.level.tree
-        val layers = viewModel.document.layers.toList()
-
-        // Visible level set: root down to the camera's level, then its children.
-        val chain = ArrayList<ZoomLevel>()
-        var l: ZoomLevel? = camera.level
-        while (l != null) {
-            chain.add(l)
-            l = l.parent
-        }
-        val levels = ArrayList<ZoomLevel>(chain.size + 4)
-        for (i in chain.indices.reversed()) levels.add(chain[i]) // root first
-        levels.addAll(tree.childrenOf(camera.level))
-        val visibleIds = HashSet<Long>(levels.size * 2)
-        for (lvl in levels) visibleIds.add(lvl.id)
-
-        // Renderable passes: transform + viewport rect per level.
-        class Pass(val lvl: ZoomLevel, val k: Float, val tx: Float, val ty: Float,
-                   val rect: FloatArray)
-        val passes = ArrayList<Pass>(levels.size)
-        for (lvl in levels) {
-            val t = camera.transformTo(lvl)
+        // clipBounds includes the inverse canvas rotation, avoiding clipped corners.
+        val clip = canvas.clipBounds
+        data class Pass(val level: ZoomLevel, val k: Float, val tx: Float, val ty: Float,
+                        val rect: FloatArray, val visible: Set<StrokeData>)
+        val descendants = if (allDescendants) tree.allLevels().filter { candidate ->
+            candidate !== camera.level && generateSequence(candidate.parent) { it.parent }.any { it === camera.level }
+        } else tree.childrenOf(camera.level)
+        val levels = generateSequence(camera.level) { it.parent }.toList().asReversed() + descendants
+        val passes = levels.mapNotNull { level ->
+            val t = camera.transformTo(level)
             val k = t[0]
-            if (!k.isFinite() || k < minRenderableScale || k > maxRenderableScale) continue
-            passes.add(Pass(lvl, k, t[1], t[2], floatArrayOf(
-                (0f - t[1]) / k, (0f - t[2]) / k,
-                (canvas.width - t[1]) / k, (canvas.height - t[2]) / k,
-            )))
+            if (!k.isFinite() || k !in minRenderableScale..maxRenderableScale ||
+                !t[1].isFinite() || !t[2].isFinite()) return@mapNotNull null
+            val rect = floatArrayOf((clip.left - t[1]) / k, (clip.top - t[2]) / k,
+                (clip.right - t[1]) / k, (clip.bottom - t[2]) / k)
+            val visible = doc.strokeIndex.queryVisibleLevel(level.id,
+                rect[0], rect[1], rect[2], rect[3]).map { it.first }.toHashSet()
+            Pass(level, k, t[1], t[2], rect, visible)
         }
+        fun intersects(b: FloatArray, r: FloatArray, pad: Float = 0f) =
+            b[2] + pad >= r[0] && b[0] - pad <= r[2] &&
+                b[3] + pad >= r[1] && b[1] - pad <= r[3]
 
-        val anyBlended = layers.any { it.isVisible && it.blend != LayerBlend.NORMAL }
-
-        if (!anyBlended) {
-            // ---- fast path: level-major (pre-P2 rendering, unchanged) ----
+        // Always paint whole sheets in layer order, including the live gesture.
+        // Opacity belongs to the composed sheet, not each overlapping mark.
+        for (layer in doc.layers) {
+            if (!layer.isVisible || layer.opacity <= 0f) continue
+            val grouped = layer.blend != LayerBlend.NORMAL || layer.opacity < 1f
+            if (grouped) {
+                applyBlendTo(layerBlendPaint, layer.blend)
+                layerBlendPaint.alpha = (layer.opacity * 255).toInt().coerceIn(0, 255)
+                canvas.saveLayer(null, layerBlendPaint)
+            }
             for (pass in passes) {
                 canvas.save()
-                val m = Matrix()
-                m.setScale(pass.k, pass.k)
-                m.postTranslate(pass.tx, pass.ty)
-                canvas.concat(m)
-
-                // images of this level first (underlay), across layers in order
-                for (layer in layers) {
-                    if (!layer.isVisible) continue
-                    for (img in layer.images.toList()) {
-                        if (img.levelId != pass.lvl.id) continue
-                        val ib = img.bbox() // rotation-aware extents
-                        if (ib[2] < pass.rect[0] || ib[0] > pass.rect[2] ||
-                            ib[3] < pass.rect[1] || ib[1] > pass.rect[3]
-                        ) continue
-                        drawImage(canvas, img, layer.opacity)
-                    }
+                canvas.translate(pass.tx, pass.ty)
+                canvas.scale(pass.k, pass.k)
+                for (img in layer.images) {
+                    if (img.levelId == pass.level.id && intersects(img.bbox(), pass.rect))
+                        drawImage(canvas, img, 1f)
                 }
-
-                // strokes of this level, per layer via the level's index buckets
-                val visible = viewModel.document.strokeIndex
-                    .queryVisibleLevel(pass.lvl.id, pass.rect[0], pass.rect[1], pass.rect[2], pass.rect[3])
-                if (visible.isNotEmpty()) {
-                    val byLayer = LinkedHashMap<LayerData, MutableList<StrokeData>>()
-                    for ((stroke, layer) in visible) byLayer.getOrPut(layer) { mutableListOf() }.add(stroke)
-                    for (layer in layers) {
-                        if (!layer.isVisible) continue
-                        byLayer[layer]?.forEach { drawStroke(canvas, it, layer.opacity) }
-                    }
+                // Grid traversal order is spatial, not paint order.
+                for (stroke in layer.strokes) {
+                    if (stroke in pass.visible) drawStroke(canvas, stroke, 1f)
                 }
-                // P3: per-layer SHAPES then SMUDGES of this level (stamps
-                // paint over strokes within the same layer — deposit order;
-                // both after that layer's strokes, images stay under all)
-                for (layer in layers) {
-                    if (!layer.isVisible) continue
-                    for (sh in layer.shapes.toList()) {
-                        if (sh.levelId != pass.lvl.id) continue
-                        val b = sh.bbox()
-                        val w = sh.outlineWidthWorld * 0.5f + 0.01f // cull slack
-                        if (b[2] + w < pass.rect[0] || b[0] - w > pass.rect[2] ||
-                            b[3] + w < pass.rect[1] || b[1] - w > pass.rect[3]
-                        ) continue
-                        drawShape(canvas, sh, layer.opacity)
+                for (shape in layer.shapes) {
+                    if (shape.levelId == pass.level.id &&
+                        intersects(shape.bbox(), pass.rect, shape.outlineWidthWorld))
+                        drawShape(canvas, shape, 1f)
+                }
+                drawSmudgesOfLevel(canvas, layer, pass.level.id, 1f)
+                if (includeInProgress && layer === doc.activeLayer) {
+                    viewModel.inProgress?.takeIf { it.levelId == pass.level.id }?.let { stroke ->
+                        val pts = if (viewModel.lazyActive && stroke.points.size >= 2)
+                            LazyBrush.smoothPoints(stroke.points.toList()) else null
+                        drawStroke(canvas, stroke, 1f, pts)
                     }
-                    drawSmudgesOfLevel(canvas, layer, pass.lvl.id, layer.opacity)
+                    viewModel.inProgressShape?.takeIf { it.levelId == pass.level.id }?.let {
+                        drawShape(canvas, it, 1f)
+                    }
+                    viewModel.inProgressSmudge?.takeIf { it.levelId == pass.level.id }?.let {
+                        for (stamp in it.stamps) drawStamp(canvas, stamp, 1f)
+                    }
                 }
                 canvas.restore()
             }
-        } else {
-            // ---- P2.3 layer-major path: stacked sheets, blended via saveLayer ----
-            for (layer in layers) {
-                if (!layer.isVisible) continue
-                val blended = layer.blend != LayerBlend.NORMAL
-                if (blended) {
-                    applyBlendTo(layerBlendPaint, layer.blend)
-                    canvas.saveLayer(null, layerBlendPaint)
-                }
-                for (pass in passes) {
-                    canvas.save()
-                    val m = Matrix()
-                    m.setScale(pass.k, pass.k)
-                    m.postTranslate(pass.tx, pass.ty)
-                    canvas.concat(m)
-
-                    // this sheet's images of the level (under its strokes)
-                    for (img in layer.images.toList()) {
-                        if (img.levelId != pass.lvl.id) continue
-                        val ib = img.bbox() // rotation-aware extents
-                        if (ib[2] < pass.rect[0] || ib[0] > pass.rect[2] ||
-                            ib[3] < pass.rect[1] || ib[1] > pass.rect[3]
-                        ) continue
-                        drawImage(canvas, img, layer.opacity)
-                    }
-
-                    // this sheet's strokes of the level (identity-filtered)
-                    val visible = viewModel.document.strokeIndex
-                        .queryVisibleLevel(pass.lvl.id, pass.rect[0], pass.rect[1], pass.rect[2], pass.rect[3])
-                    for ((stroke, owner) in visible) {
-                        if (owner === layer) drawStroke(canvas, stroke, layer.opacity)
-                    }
-                    // P3: this sheet's shapes then smudges of the level
-                    for (sh in layer.shapes.toList()) {
-                        if (sh.levelId != pass.lvl.id) continue
-                        val b = sh.bbox()
-                        val w = sh.outlineWidthWorld * 0.5f + 0.01f // cull slack
-                        if (b[2] + w < pass.rect[0] || b[0] - w > pass.rect[2] ||
-                            b[3] + w < pass.rect[1] || b[1] - w > pass.rect[3]
-                        ) continue
-                        drawShape(canvas, sh, layer.opacity)
-                    }
-                    drawSmudgesOfLevel(canvas, layer, pass.lvl.id, layer.opacity)
-                    canvas.restore()
-                }
-                if (blended) canvas.restore()
-            }
+            if (grouped) canvas.restore()
         }
-
-        if (includeInProgress) {
-            viewModel.inProgress?.let { s ->
-                val lvl = tree.byId(s.levelId) ?: return@let
-                val t = camera.transformTo(lvl)
-                val k = t[0]
-                if (k.isFinite() && k in minRenderableScale..maxRenderableScale) {
-                    val active = viewModel.document.activeLayer
-                    val blended = active.blend != LayerBlend.NORMAL
-                    if (blended) {
-                        // live stroke on a blended sheet composites against
-                        // the flattened backdrop with the sheet's own mode
-                        applyBlendTo(layerBlendPaint, active.blend)
-                        canvas.saveLayer(null, layerBlendPaint)
-                    }
-                    canvas.save()
-                    val m = Matrix()
-                    m.setScale(k, k)
-                    m.postTranslate(t[1], t[2])
-                    canvas.concat(m)
-                    // P3.2: while a LAZY gesture runs, the live stroke renders
-                    // through the midpoint-quadratic smoother so the mark is
-                    // smooth for the WHOLE gesture (not only after commit).
-                    // The stroke's own points stay RAW rope samples — only
-                    // the drawn path is smoothed, once per frame, so the
-                    // point count can never grow exponentially.
-                    val livePts = if (viewModel.lazyActive && s.points.size >= 2) {
-                        LazyBrush.smoothPoints(s.points.toList())
-                    } else null
-                    drawStroke(canvas, s, active.opacity, livePts)
-                    canvas.restore()
-                    if (blended) canvas.restore()
-                }
-            }
-            // P3.1: live rubber-band shape (same level transform + active
-            // sheet blend wrapping as the in-progress stroke)
-            viewModel.inProgressShape?.let { s ->
-                val lvl = tree.byId(s.levelId) ?: return@let
-                val t = camera.transformTo(lvl)
-                val k = t[0]
-                if (k.isFinite() && k in minRenderableScale..maxRenderableScale) {
-                    val active = viewModel.document.activeLayer
-                    val blended = active.blend != LayerBlend.NORMAL
-                    if (blended) {
-                        applyBlendTo(layerBlendPaint, active.blend)
-                        canvas.saveLayer(null, layerBlendPaint)
-                    }
-                    canvas.save()
-                    val m = Matrix()
-                    m.setScale(k, k)
-                    m.postTranslate(t[1], t[2])
-                    canvas.concat(m)
-                    drawShape(canvas, s, active.opacity)
-                    canvas.restore()
-                    if (blended) canvas.restore()
-                }
-            }
-            // P3.3: live smudge trail (stamps deposited so far)
-            viewModel.inProgressSmudge?.let { sm ->
-                val lvl = tree.byId(sm.levelId) ?: return@let
-                val t = camera.transformTo(lvl)
-                val k = t[0]
-                if (k.isFinite() && k in minRenderableScale..maxRenderableScale) {
-                    val active = viewModel.document.activeLayer
-                    val blended = active.blend != LayerBlend.NORMAL
-                    if (blended) {
-                        applyBlendTo(layerBlendPaint, active.blend)
-                        canvas.saveLayer(null, layerBlendPaint)
-                    }
-                    canvas.save()
-                    val m = Matrix()
-                    m.setScale(k, k)
-                    m.postTranslate(t[1], t[2])
-                    canvas.concat(m)
-                    for (st in sm.stamps) drawStamp(canvas, st, active.opacity)
-                    canvas.restore()
-                    if (blended) canvas.restore()
-                }
-            }
-        }
-
-        // bookmark pins in SCREEN space; only pins of visible levels
-        for (b in viewModel.document.bookmarks.toList()) {
-            if (b.levelId !in visibleIds) continue
-            val lvl = tree.byId(b.levelId) ?: continue
-            val t = camera.transformTo(lvl)
-            val k = t[0]
-            if (!k.isFinite() || k < minRenderableScale) continue
-            val sx = b.worldX * k + t[1]
-            val sy = b.worldY * k + t[2]
-            if (sx < -20f || sx > canvas.width + 20f || sy < -20f || sy > canvas.height + 20f) continue
-            canvas.drawCircle(sx, sy, 10f, bookmarkPaint)
+        // Navigation annotations are editor chrome, never exported artwork.
+        if (includeInProgress) for (bookmark in doc.bookmarks) {
+            val level = tree.byId(bookmark.levelId) ?: continue
+            if (level !in levels) continue
+            val t = camera.transformTo(level)
+            if (!t[0].isFinite() || t[0] !in minRenderableScale..maxRenderableScale) continue
+            val x = bookmark.worldX * t[0] + t[1]
+            val y = bookmark.worldY * t[0] + t[2]
+            if (x >= clip.left - 20 && x <= clip.right + 20 &&
+                y >= clip.top - 20 && y <= clip.bottom + 20)
+                canvas.drawCircle(x, y, 10f, bookmarkPaint)
         }
     }
 
     private fun drawImage(canvas: Canvas, img: PlacedImage, layerOpacity: Float) {
-        val bmp = imageCache.getOrPut(img.path) {
+        val bmp = imageCache.get(img.path) ?: run {
             val f = File(context.filesDir, img.path)
-            if (!f.exists()) null else BitmapFactory.decodeFile(f.absolutePath)
-        } ?: return
+            if (!f.exists()) return
+            val decoded = BitmapFactory.decodeFile(f.absolutePath) ?: return
+            imageCache.put(img.path, decoded)
+            decoded
+        }
         // P4.3: per-image transparency (x the layer's own opacity)
         imagePaint.alpha = (img.alpha * layerOpacity * 255f).toInt().coerceIn(0, 255)
         // P4.3: render-time DISPLAY filter — ColorMatrix on the image paint
@@ -1478,7 +1388,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
         }
     }
 
-    private fun drawStroke(
+    internal fun drawStroke(
         canvas: Canvas,
         stroke: StrokeData,
         layerOpacity: Float,
@@ -1493,7 +1403,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
             layerOpacity * 255f).toInt().coerceIn(0, 255)
         // [ptsOverride] lets the LIVE lazy stroke render through the
         // smoother without mutating the committed points (see drawScene).
-        val pts = ptsOverride ?: stroke.points.toList()
+        val pts = ptsOverride ?: stroke.points
         if (pts.isEmpty()) return
         if (pts.size == 1) {
             strokeFillPaint.pathEffect = null
@@ -1514,7 +1424,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
             // brushes keep their constant alpha (alphaForPressure == opacity).
             strokeFillPaint.pathEffect = null
             strokeFillPaint.color = brush.color
-            val rnd = java.util.Random(pts.hashCode().toLong())
+            val rnd = java.util.Random(0x5EEDL)
             fun stamp(x: Float, y: Float, r: Float, pressure: Float) {
                 strokeFillPaint.alpha =
                     (brush.alphaForPressure(pressure) * layerOpacity * 255f)
@@ -1533,6 +1443,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
             }
             stamp(pts[0].x, pts[0].y,
                 brush.widthForPressure(pts[0].pressure01) * 0.5f, pts[0].pressure01)
+            var nextStamp = brush.spacingWorld.coerceAtLeast(0.01f)
             for (i in 1 until pts.size) {
                 val a = pts[i - 1]
                 val b = pts[i]
@@ -1540,14 +1451,15 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 val dy = b.y - a.y
                 val len = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
                 if (len < 1e-4f) continue
-                var t = brush.spacingWorld
+                var t = nextStamp
                 while (t <= len) {
                     val f = t / len
-                    val mid = (a.pressure01 + b.pressure01) * 0.5f
+                    val mid = a.pressure01 + (b.pressure01 - a.pressure01) * f
                     stamp(a.x + dx * f, a.y + dy * f,
                         brush.widthForPressure(mid) * 0.5f, mid)
-                    t += brush.spacingWorld
+                    t += brush.spacingWorld.coerceAtLeast(0.01f)
                 }
+                nextStamp = t - len
             }
             return
         }
@@ -1572,20 +1484,30 @@ class ZoomableCanvasView @JvmOverloads constructor(
         strokeFillPaint.pathEffect = null
         strokeFillPaint.color = brush.color
         strokeFillPaint.alpha = alpha
-        scratchPath.reset()
-        if (StrokeOutline.buildPath(pts, brush, AndroidPathSink(scratchPath), stroke.taper)) {
-            canvas.drawPath(scratchPath, strokeFillPaint)
-            val first = pts.first()
-            val last = pts.last()
-            // P3.2: tapered ends shrink the cap circles with them (factor
-            // ~0 at the very ends); skip zero-radius draws.
+        val cacheable = ptsOverride == null && stroke !== viewModel.inProgress
+        val cached = if (cacheable) outlineCache.get(stroke)?.takeIf {
+            it.revision == stroke.geometryRevision && it.taper == stroke.taper
+        } else null
+        if (cached != null) {
+            canvas.drawPath(cached.path, strokeFillPaint)
+            return
+        }
+        val outline = if (cacheable) Path() else scratchPath.apply { reset() }
+        if (StrokeOutline.buildPath(pts, brush, AndroidPathSink(outline), stroke.taper)) {
             val capF = if (stroke.taper > 0f) LazyBrush.taperFactors(pts, stroke.taper) else null
-            val rFirst = brush.widthForPressure(first.pressure01) * 0.5f *
-                (capF?.get(0) ?: 1f)
-            val rLast = brush.widthForPressure(last.pressure01) * 0.5f *
-                (capF?.get(capF.size - 1) ?: 1f)
-            if (rFirst > 0.05f) canvas.drawCircle(first.x, first.y, rFirst, strokeFillPaint)
-            if (rLast > 0.05f) canvas.drawCircle(last.x, last.y, rLast, strokeFillPaint)
+            val first = pts.first(); val last = pts.last()
+            val rFirst = brush.widthForPressure(first.pressure01) * 0.5f * (capF?.get(0) ?: 1f)
+            val rLast = brush.widthForPressure(last.pressure01) * 0.5f * (capF?.last() ?: 1f)
+            // Merge caps into the outline so translucent ink is composited only once.
+            fun cap(point: StrokePoint, radius: Float) {
+                if (radius <= 0.05f) return
+                val circle = Path().apply { addCircle(point.x, point.y, radius, Path.Direction.CW) }
+                outline.op(circle, Path.Op.UNION)
+            }
+            cap(first, rFirst); cap(last, rLast)
+            if (cacheable) outlineCache.put(stroke, CachedOutline(stroke.geometryRevision,
+                stroke.taper, outline, 128 + pts.size.coerceAtMost(100_000) * 32, rFirst, rLast))
+            canvas.drawPath(outline, strokeFillPaint)
         }
     }
 
@@ -1692,13 +1614,14 @@ class ZoomableCanvasView @JvmOverloads constructor(
     }
 
     fun animateToBookmark(bookmark: Bookmark) {
+        bookmarkAnimator?.cancel()
         val tree = viewModel.document.levelTree
         val target = pinCamera(bookmark, tree, width.toFloat(), height.toFloat())
         val from = Camera(
             viewModel.camera.scale, viewModel.camera.transX, viewModel.camera.transY,
             viewModel.camera.level,
         )
-        ValueAnimator.ofFloat(0f, 1f).apply {
+        bookmarkAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 700
             interpolator = DecelerateInterpolator()
             addUpdateListener { animator ->
@@ -1707,6 +1630,18 @@ class ZoomableCanvasView @JvmOverloads constructor(
             }
             start()
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        if (isDrawing) cancelActiveGesture()
+        cancelDemo()
+        bookmarkAnimator?.cancel()
+        scroller.forceFinished(true)
+        smudgeSnapshot?.recycle()
+        smudgeSnapshot = null
+        imageCache.evictAll()
+        outlineCache.evictAll()
+        super.onDetachedFromWindow()
     }
 
     companion object {

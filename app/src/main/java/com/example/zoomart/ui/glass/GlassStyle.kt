@@ -9,17 +9,16 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 
-/** Brand palette (mirrors app/src/main/res/values/colors.xml). */
+/** Base and legacy action colors. Current orbital identity is documented in BRAND_GUIDE.md. */
 object Brand {
-    /** Dark navy canvas background (#1A1C24). */
-    const val BACKGROUND = 0xFF1A1C24.toInt()
+    /** Deep navy welcome/settings base; the drawing canvas remains separate. */
+    const val BACKGROUND = 0xFF111929.toInt()
     /** Inner-ring blue (#2E66F6). */
     const val BLUE = 0xFF2E66F6.toInt()
     /** Pressed/active blue (#1E4FB8). */
@@ -28,81 +27,118 @@ object Brand {
     const val WHITE = 0xFFFFFFFF.toInt()
 }
 
-/**
- * U1/U2 (UI overhaul): the design tokens + tiny styling helpers for the
- * Procreate-like dark glass language. One place owns every color so the
- * panels keep a consistent dark-mode contrast.
+/** Shared orbital surfaces, readable text and amber selected-tool feedback.
+ * The pale Atelier variant keeps brush previews distinct from dark control surfaces.
+ * See docs/BRAND_GUIDE.md for the current identity; older token names remain compatible.
  */
 object GlassStyle {
 
-    /** Frosted panel scrim (the decision's rgba(22,24,29,0.72)). */
-    const val SCRIM = 0xB816181D.toInt()          // 72% opaque #16181D
+    // ----- neutral chrome (measured: icons.jpg bg #222127, crisp opaque) -----
 
-    /** Chip/border hairline rgba(255,255,255,0.08). */
-    const val BORDER = 0x14FFFFFF.toInt()
+    /** Near-opaque neutral panel fill: #16171B @ 90% (crisp, not frosted). */
+    const val SCRIM = 0xE616171B.toInt()
 
-    /** Primary light text on the dark scrim. */
-    const val TEXT_PRIMARY = 0xFFE8EAEE.toInt()
+    /** Chip/border hairline: white @ 12% — neutral, not blue. */
+    const val BORDER = 0x1FFFFFFF.toInt()
+
+    /** Primary light text on the dark chrome. */
+    const val TEXT_PRIMARY = 0xFFECEDEF.toInt()
 
     /** Secondary (label/hint) text. */
-    const val TEXT_SECONDARY = 0xFF9AA3AF.toInt()
+    const val TEXT_SECONDARY = 0xFF98A0A8.toInt()
 
-    /** Dock/panel button fill (dark translucent glass). */
-    const val BUTTON_FILL = 0x802A2E37.toInt()   // 50% opaque glass
+    /** Panel/dock button fill: solid quiet gray (wheel.jpg chrome family). */
+    const val BUTTON_FILL = 0xFF303346.toInt()
 
-    /** Active button fill (brand blue translucent). */
-    const val BUTTON_ACTIVE = 0x992E66F6.toInt()  // 60% opaque brand blue
+    /** Active button fill: deep amber (fills use the darker measured variant). */
+    const val BUTTON_ACTIVE = 0xFFE0A000.toInt()
 
-    /** Accent (active state) tint. */
-    const val ACCENT = 0xFF2E66F6.toInt()
+    /** Amber accent #FFAD01 — selected/active states, thumbs, level number
+     *  (measured exact from the brushes2.jpg reference). */
+    const val ACCENT = 0xFFFFAD01.toInt()
 
-    /** Corner radius in dp (the decision's "~28px" corner, density-scaled). */
-    const val CORNER_DP = 28f
+    /** Deep amber #E0A000 — filled active chips (12% darker, for contrast). */
+    const val ACCENT_DEEP = 0xFFE0A000.toInt()
 
-    /** Panel elevation in dp (soft shadow under the floating shell). */
-    const val ELEVATION_DP = 12f
+    // ----- light reading panels (measured: brushes.jpg rows #F0F0F0/#FCFCFC) -----
 
-    /** Rounded translucent panel background: scrim + 1px light hairline. */
+    /** Light panel fill (brush panel shell). */
+    const val LIGHT_PANEL = 0xFFF2F2F2.toInt()
+
+    /** Light row card inside a light panel. */
+    const val LIGHT_ROW = 0xFFFAFAFA.toInt()
+
+    /** Ink on light panels (measured #1E1E1E). */
+    const val LIGHT_INK = 0xFF1E1E1E.toInt()
+
+    /** Secondary ink on light panels. */
+    const val LIGHT_INK_SECONDARY = 0xFF6E6E6E.toInt()
+
+    /** 1px rule on light panels: ink @ 10%. */
+    const val LIGHT_BORDER = 0x1A1E1E1E.toInt()
+
+    /** Corner radius: compact/crisp (was 28f). */
+    const val CORNER_DP = 12f
+
+    /** Panel elevation: flat + quiet (was 12f). */
+    const val ELEVATION_DP = 6f
+
+    /** Backdrop blur radius: a subtle depth cue only (was 12dp) — the
+     *  reference chrome is crisp; the machinery is kept, the prominence
+     *  reduced (spec section 2). */
+    const val BLUR_DP = 5f
+
+    /** Neutral rounded panel background: near-opaque fill + 1px hairline. */
     fun panelBackground(density: Float): GradientDrawable =
         GradientDrawable().apply {
-            setColor(SCRIM)
+            orientation=GradientDrawable.Orientation.TL_BR
+            colors=intArrayOf(0xF521293C.toInt(),0xF5332945.toInt(),0xF51C343B.toInt())
             cornerRadius = CORNER_DP * density
             setStroke(maxOf(1, (density).toInt()), BORDER)
+        }
+
+    /** Light variant for reading panels (brush list) — same shape, light ink. */
+    fun lightPanelBackground(density: Float): GradientDrawable =
+        GradientDrawable().apply {
+            orientation=GradientDrawable.Orientation.TL_BR
+            colors=intArrayOf(0xFFF4EEF9.toInt(),0xFFF8F4F0.toInt(),0xFFEAF5F2.toInt())
+            cornerRadius = CORNER_DP * density
+            setStroke(maxOf(1, (density).toInt()), LIGHT_BORDER)
         }
 
     /** Small rounded chip background (HUD, section labels). */
     fun chipBackground(density: Float): GradientDrawable =
         GradientDrawable().apply {
-            setColor(SCRIM)
+            orientation=GradientDrawable.Orientation.TL_BR
+            colors=intArrayOf(0xF521293C.toInt(),0xF5332945.toInt(),0xF51C343B.toInt())
             cornerRadius = CORNER_DP * 0.5f * density
             setStroke(maxOf(1, (density).toInt()), BORDER)
         }
 
-    /** The drag handle's grip pill (a short light bar). */
+    /** The drag handle's grip pill (a short neutral bar). */
     fun gripBackground(density: Float): GradientDrawable =
         GradientDrawable().apply {
-            setColor(0x38FFFFFF)
-            cornerRadius = 2f * density
+            setColor(0x42FFFFFF)
+            cornerRadius = 1.5f * density
         }
 
-    /** Dark-mode restyle for a Material button (keeps 48dp+ targets). */
+    /** Neutral restyle for a text button (48dp+ targets preserved). */
     fun button(b: Button) {
         b.backgroundTintList = ColorStateList.valueOf(BUTTON_FILL)
         b.setTextColor(TEXT_PRIMARY)
-        b.isAllCaps = true
+        b.isAllCaps = false
         b.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
     }
 
-    /** Dark-mode restyle for an icon ImageButton: glass fill, white icon,
-     *  brand-blue tint when active. [active] applies the brand-blue tint.
-     *  Includes a subtle drop shadow layer so the button pops off glass. */
+    /**
+     * Line-icon button restyle: TRANSPARENT background (the strip is one
+     * bar, not per-button chips), neutral stroke icon; [active] tints the
+     * icon amber. Press feedback stays in Springs.
+     */
     fun iconButton(b: ImageButton, active: Boolean = false) {
-        b.backgroundTintList = ColorStateList.valueOf(
-            if (active) BUTTON_ACTIVE else BUTTON_FILL)
-        b.setColorFilter(TEXT_PRIMARY)
+        b.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+        b.setColorFilter(if (active) ACCENT else TEXT_PRIMARY)
         b.scaleType = ImageView.ScaleType.CENTER_INSIDE
-        b.setPadding((b.resources.displayMetrics.density * 6).toInt(), 0,
-            (b.resources.displayMetrics.density * 6).toInt(), 0)
         b.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
     }
 
@@ -154,6 +190,8 @@ object GlassStyle {
     /** Trigger a short selection haptic tap (tool toggles, panel opens, etc). */
     fun selectionTap(context: Context) {
         try {
+            if (android.provider.Settings.System.getInt(context.contentResolver,
+                    android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 0) return
             val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
@@ -167,6 +205,8 @@ object GlassStyle {
     /** Trigger a light press haptic (button down). */
     fun pressTap(context: Context) {
         try {
+            if (android.provider.Settings.System.getInt(context.contentResolver,
+                    android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 0) return
             val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))

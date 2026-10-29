@@ -119,6 +119,7 @@ class AppSmokeTest {
 
         // --- 7. pause -> atomic autosave fires ---
         controller.pause()
+        com.example.zoomart.model.SessionWriter.awaitIdle()
         val sessionFile = File(activity.filesDir, "zoomart_session.json")
         assertTrue("autosave file missing", sessionFile.exists())
         val restored = DocumentCodec.fromJson(sessionFile.readText())

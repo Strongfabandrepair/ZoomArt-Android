@@ -51,6 +51,9 @@ class FloatingPanel(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE),
     val kind: Kind = Kind.PANEL,
+    /** v0.7.0: LIGHT reading-panel variant (brush list) — same machinery,
+     *  the neutral tokens swap for the measured light-panel look. */
+    private val light: Boolean = false,
 ) : FrameLayout(context) {
 
     enum class Kind { PANEL, DOCK }
@@ -66,14 +69,15 @@ class FloatingPanel(
 
     private val density = resources.displayMetrics.density
     private val cornerPx = GlassStyle.CORNER_DP * density
-    private val blurRadiusPx = 12f * density
+    private val blurRadiusPx = GlassStyle.BLUR_DP * density
 
     // ----- children (bottom to top) -----
     private val backdrop = ImageView(context).apply {
         scaleType = ImageView.ScaleType.FIT_XY
         visibility = GONE
     }
-    private val scrim = View(context).apply { setBackgroundColor(GlassStyle.SCRIM) }
+    private val scrim = com.example.zoomart.ui.StudioBackdrop(context,subdued=true,light=light)
+    fun setAmbientPaused(paused: Boolean) { scrim.setMotionPaused(paused) }
     private val handle = PanelHandle(context)
     val content = FrameLayout(context).apply {
         val p = (density * 12).toInt()
@@ -98,13 +102,15 @@ class FloatingPanel(
     private var savedRest: IntArray? = null
 
     init {
-        background = GlassStyle.panelBackground(density)
+        background = if (light) GlassStyle.lightPanelBackground(density)
+            else GlassStyle.panelBackground(density)
         // the hairline must draw ABOVE the backdrop/scrim children, so it
         // lives on the foreground layer (the background's own stroke is
         // covered by the fill children)
         foreground = GradientDrawable().apply {
             cornerRadius = cornerPx
-            setStroke(maxOf(1, density.toInt()), GlassStyle.BORDER)
+            setStroke(maxOf(1, density.toInt()),
+                if (light) GlassStyle.LIGHT_BORDER else GlassStyle.BORDER)
         }
         elevation = GlassStyle.ELEVATION_DP * density
         clipToOutline = true
@@ -138,8 +144,8 @@ class FloatingPanel(
     /** Hosts a panel view inside the shell (below the handle). */
     fun setContent(view: View) {
         content.removeAllViews()
-        content.addView(view, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
-        content.minimumWidth = (CONTENT_MIN_DP * density).toInt()
+        content.addView(view, view.layoutParams ?: LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
+        content.minimumWidth = if (kind == Kind.DOCK) 0 else (CONTENT_MIN_DP * density).toInt()
     }
 
     /**
@@ -153,7 +159,9 @@ class FloatingPanel(
      * positions them edge-to-edge inside it.
      */
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        measureChildWithMargins(content, widthMeasureSpec, 0, heightMeasureSpec, 0)
+        val handleH = if (handle.visibility == GONE) 0 else
+            ((if (kind == Kind.DOCK) HANDLE_DP * 0.5f else HANDLE_DP.toFloat()) * density).toInt()
+        measureChildWithMargins(content, widthMeasureSpec, 0, heightMeasureSpec, handleH)
         val clp = content.layoutParams as MarginLayoutParams
         val contentW = content.measuredWidth + clp.leftMargin + clp.rightMargin
         val contentH = content.measuredHeight + clp.topMargin + clp.bottomMargin
@@ -161,7 +169,6 @@ class FloatingPanel(
         var h = contentH
         if (handle.visibility != GONE && handle.parent != null) {
             val hlp = handle.layoutParams as MarginLayoutParams
-            val handleH = (HANDLE_DP * density).toInt()
             // the handle spans the full shell width (its drag surface)
             handle.measure(
                 MeasureSpec.makeMeasureSpec(
@@ -183,12 +190,36 @@ class FloatingPanel(
         scrim.measure(fillW, fillH)
     }
 
+    private var lastParentWidth=0
+    private var lastParentHeight=0
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        // FrameLayout overlays children by default. Reserve the actual handle strip.
+        if (handle.visibility != GONE) content.offsetTopAndBottom(handle.measuredHeight)
+        val host=parent as? View ?: return
+        val resized=host.width!=lastParentWidth || host.height!=lastParentHeight
+        lastParentWidth=host.width;lastParentHeight=host.height
+        if (!dragging && !autoHidden && host.width>0 && host.height>0 && (resized || kind==Kind.DOCK)) {
+            val safeWidth=width.coerceAtLeast((48*density).toInt())
+            val safeHeight=height.coerceAtLeast(((if(kind==Kind.DOCK) 96 else 64)*density).toInt())
+            val x=left.coerceIn(0,(host.width-safeWidth).coerceAtLeast(0))
+            val y=top.coerceIn(0,(host.height-safeHeight).coerceAtLeast(0))
+            if(x!=left || y!=top) post { if(isAttachedToWindow) commitRest(x.toFloat(),y.toFloat()) }
+        }
+    }
+
     val isShowing: Boolean get() = visibility == VISIBLE
 
     // ----- show / hide with springs -----
 
     /** Spring entrance: alpha 0->1, scale 0.9->1; snapshots the backdrop. */
     fun show() {
+        if (!Springs.enabled()) {
+            springs.values.toList().forEach { it.cancel() }; springs.clear()
+            visibility = VISIBLE; alpha = 1f; scaleX = 1f; scaleY = 1f
+            translationX = 0f; translationY = 0f; autoHidden = false
+            refreshBackdrop(); return
+        }
         cancel(DynamicAnimation.ALPHA)
         if (visibility != VISIBLE) {
             visibility = VISIBLE
@@ -207,6 +238,10 @@ class FloatingPanel(
 
     /** Spring exit; GONE once the fade settles. */
     fun dismiss() {
+        if (!Springs.enabled()) {
+            springs.values.toList().forEach { it.cancel() }; springs.clear()
+            visibility = GONE; autoHidden = false; return
+        }
         autoHidden = false
         if (visibility == GONE) return
         spring(DynamicAnimation.SCALE_X, 0.92f)
@@ -245,6 +280,7 @@ class FloatingPanel(
             spring(DynamicAnimation.TRANSLATION_Y, vec[1])
             if (kind == Kind.DOCK) {
                 val anim = spring(DynamicAnimation.ALPHA, 0f)
+                if (!Springs.enabled()) visibility = INVISIBLE
                 anim.addEndListener { _, canceled, _, _ ->
                     if (!canceled && autoHidden) visibility = INVISIBLE
                 }
@@ -418,7 +454,7 @@ class FloatingPanel(
         cancel(property)
         val anim = SpringAnimation(this, property).apply {
             spring = force(target)
-            start()
+            if (Springs.enabled()) start() else property.setValue(this@FloatingPanel, target)
         }
         springs[property] = anim
         return anim
@@ -435,7 +471,12 @@ class FloatingPanel(
             gravity = Gravity.CENTER
             contentDescription = "drag handle"
             val grip = View(context).apply {
-                background = GlassStyle.gripBackground(density)
+                background = if (light)
+                    GradientDrawable().apply {
+                        setColor(0x421E1E1E.toInt())
+                        cornerRadius = 1.5f * density
+                    }
+                else GlassStyle.gripBackground(density)
             }
             addView(grip, LayoutParams((GRIP_W_DP * density).toInt(), (GRIP_H_DP * density).toInt())
                 .apply { gravity = Gravity.CENTER_VERTICAL })

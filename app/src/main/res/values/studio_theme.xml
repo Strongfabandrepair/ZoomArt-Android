@@ -1,0 +1,15 @@
+<resources>
+    <style name="Theme.ZoomArt" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorAccent">#C7A1FF</item>
+        <item name="alertDialogTheme">@style/Theme.ZoomArt.Dialog</item>
+        <item name="android:colorBackgroundFloating">#21293C</item>
+        <item name="android:windowBackground">#111929</item>
+        <item name="android:popupBackground">@drawable/studio_menu_background</item>
+    </style>
+    <style name="Theme.ZoomArt.Dialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/studio_menu_background</item>
+        <item name="colorAccent">#C7A1FF</item>
+        <item name="android:textColorPrimary">#F4F1FA</item>
+        <item name="android:textColorSecondary">#C7C4D5</item>
+    </style>
+</resources>

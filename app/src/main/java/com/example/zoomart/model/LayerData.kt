@@ -73,6 +73,7 @@ class LayerData(
                 img.alpha, img.locked, img.rotation,
             )
             imgCopy.displayFilter = img.displayFilter
+            imgCopy.flipH = img.flipH
             copy.images.add(imgCopy)
         }
         for (sh in shapes) copy.shapes.add(sh.deepCopy())
@@ -322,6 +323,7 @@ class DrawingDocument {
     fun undo(): Boolean {
         val cmd = undoStack.removeLastOrNull() ?: return false
         cmd.undo()
+        pruneSelectionToActiveLayer()
         redoStack.addLast(cmd)
         return true
     }
@@ -330,6 +332,7 @@ class DrawingDocument {
         val cmd = redoStack.removeLastOrNull() ?: return false
         cmd.redo()
         undoStack.addLast(cmd)
+        pruneSelectionToActiveLayer()
         return true
     }
 
@@ -347,8 +350,13 @@ class DrawingDocument {
         shapePairs: List<Pair<ShapeData, Pair<FloatArray, FloatArray>>> = emptyList(),
         imagePairs: List<Pair<PlacedImage, Pair<FloatArray, FloatArray>>> = emptyList(),
     ) {
-        if (pairs.isEmpty() && shapePairs.isEmpty() && imagePairs.isEmpty()) return
-        undoStack.addLast(TransformStrokesCommand(this, pairs, shapePairs, imagePairs))
+        val changed = pairs.filter { it.second.first != it.second.second }
+        val changedShapes = shapePairs.filter { !it.second.first.contentEquals(it.second.second) }
+        val changedImages = imagePairs.filter { !it.second.first.contentEquals(it.second.second) }
+        if (changed.isEmpty() && changedShapes.isEmpty() && changedImages.isEmpty()) return
+        // Live transforms change bounds; update the index before the next paint/query.
+        for ((stroke, _) in changed) strokeIndex.insert(docOwnerOf(stroke), stroke)
+        undoStack.addLast(TransformStrokesCommand(this, changed, changedShapes, changedImages))
         redoStack.clear()
     }
 
@@ -499,12 +507,12 @@ class DrawingDocument {
      * mutate or delete strokes of a layer the user is no longer editing.
      */
     fun pruneSelectionToActiveLayer() {
-        if (selection.selected.isEmpty() && selection.selectedImages.isEmpty()) return
         val active = activeLayer
+        if (active.locked) { selection.clear(); return }
         selection.selected.retainAll(active.strokes)
-        // P4.2: selected images follow the same active-layer invariant
-        // (P3 shapes keep their pre-existing pruning behavior unchanged)
+        selection.selectedShapes.retainAll(active.shapes)
         selection.selectedImages.retainAll(active.images)
+        selection.selectedImages.removeAll { it.locked }
     }
 
     // ----- P2.1: layers v2 (duplicate / rename / reorder / lock / blend / opacity) -----

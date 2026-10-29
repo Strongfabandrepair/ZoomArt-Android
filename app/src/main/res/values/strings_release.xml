@@ -1,0 +1,47 @@
+<resources>
+<string name="app_name">ZoomArt</string>
+<string name="brand_tagline">A little mark. An endless world.</string>
+<string name="project_library">Your studio</string>
+<string name="save_checkpoint">Save copy</string>
+<string name="import_project">Import</string>
+<string name="trash_projects">Trash</string>
+<string name="project_name">Name this drawing</string>
+<string name="untitled_project">Untitled drawing</string>
+<string name="imported_project">Imported drawing</string>
+<string name="project_failed">Could not complete the project operation.</string>
+<string name="no_projects">No drawings here yet. Save a copy or import a .zoomart archive.</string>
+<string name="open_project">Open drawing</string>
+<string name="rename_project">Rename</string>
+<string name="duplicate_project">Duplicate</string>
+<string name="export_project">Export portable archive</string>
+<string name="restore_project">Restore</string>
+<string name="trash_confirmation">Move this drawing to Trash? You can restore it later.</string>
+<string name="more_tools">Studio tools</string>
+<string name="tool_selected">Selected</string>
+<string name="studio_short">Studio</string><string name="more_short">More</string>
+<string name="layer_studio">Layer stack</string><string name="shape_studio">Shape studio</string>
+<string name="blend_studio">Blend lab</string><string name="image_studio">Image desk</string>
+<string name="pin_studio">Pin journeys</string>
+<string name="dock_brush">Brush</string>
+<string name="dock_erase">Erase</string>
+<string name="dock_undo">Undo</string>
+<string name="dock_redo">Redo</string>
+<string name="dock_pick">Pick</string>
+<string name="dock_select">Select</string>
+<string name="dock_shapes">Shapes</string>
+<string name="dock_blend">Blend</string>
+<string name="dock_lazy">Lazy</string>
+<string name="dock_layers">Layers</string>
+<string name="dock_image">Image</string>
+<string name="dock_pins">Pins</string>
+<string name="dock_import">Import</string>
+<string name="dock_delete">Delete</string>
+<string name="dock_clear">Clear</string>
+<string name="dock_flip">Flip</string>
+<string name="dock_rotate">Rotate</string>
+<string name="dock_zoom_out">Zoom out</string>
+<string name="dock_zoom_in">Zoom in</string>
+<string name="dock_png">PNG</string>
+<string name="dock_video">Video</string>
+<string name="dock_demo">Demo</string>
+</resources>

@@ -81,6 +81,7 @@ object DocumentCodec {
                 if (img.alpha != 1f) append(",\"alpha\":").append(img.alpha)
                 if (img.locked) append(",\"locked\":").append(img.locked)
                 if (img.rotation != 0f) append(",\"rot\":").append(img.rotation)
+                if (img.flipH) append(",\"flipH\":true")
                 append("}")
             }
             append("],\"strokes\":[")
@@ -92,7 +93,14 @@ object DocumentCodec {
                 append(",\"color\":").append(stroke.brush.color)
                 append(",\"opacity\":").append(stroke.brush.opacity)
                 append(",\"pOpacity\":").append(stroke.brush.pressureOpacity)
-                append(",\"minOp\":").append(stroke.brush.minOpacity).append("}")
+                append(",\"minOp\":").append(stroke.brush.minOpacity)
+                if (stroke.brush.angleDeg != 0f) append(",\"angle\":").append(stroke.brush.angleDeg)
+                if (stroke.brush.dashOn != 0f) append(",\"dashOn\":").append(stroke.brush.dashOn)
+                if (stroke.brush.dashOff != 0f) append(",\"dashOff\":").append(stroke.brush.dashOff)
+                if (stroke.brush.scatterWorld != 0f) append(",\"scatter\":").append(stroke.brush.scatterWorld)
+                if (stroke.brush.spacingWorld != 0f) append(",\"spacing\":").append(stroke.brush.spacingWorld)
+                if (stroke.brush.erase) append(",\"erase\":true")
+                append("}")
                 append(",\"level\":").append(stroke.levelId)
                 // P3.2: lazy-brush taper (absent in pre-P3 files -> 0)
                 if (stroke.taper != 0f) append(",\"taper\":").append(stroke.taper)
@@ -156,18 +164,28 @@ object DocumentCodec {
         append("]}")
     }
 
-    private fun escape(s: String): String =
-        s.replace("\\", "\\\\").replace("\"", "\\\"")
-            .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    private fun escape(s: String): String = buildString {
+        for (c in s) when (c) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> if (c.code < 32) append("\\u" + c.code.toString(16).padStart(4, '0')) else append(c)
+        }
+    }
 
     fun fromJson(text: String): SessionData {
+        if (text.length > 64 * 1024 * 1024) throw JsonError("Document exceeds 64 MiB limit")
         val parsed = try {
-            Parser(text).value()
+            Parser(text).document()
         } catch (e: JsonError) {
             throw e
         }
         val root = parsed as? Map<*, *> ?: throw JsonError("root is not a JSON object")
+        if ((root["version"] as? Double ?: 1.0) > 3.0) throw JsonError("newer document version")
 
+        DocumentValidation.check(root)
         val doc = DrawingDocument()
 
         // ----- levels (absent in v1/v2 => single root level: migration) -----
@@ -176,12 +194,15 @@ object DocumentCodec {
             val lm = lvlAny as? Map<*, *> ?: return@forEach
             val id = (lm["id"] as? Double ?: return@forEach).toLong()
             val parentId = (lm["parentId"] as? Double)?.toLong() ?: -1L
+            val levelScale = (lm["scaleToParent"] as? Double ?: ZoomLevels.THRESHOLD.toDouble()).toFloat()
+            if (!levelScale.isFinite() || (id != ZoomLevels.ROOT_ID && levelScale <= 1f))
+                throw JsonError("invalid zoom level scale")
             doc.levelTree.attach(
                 id,
                 parentId,
                 (lm["originX"] as? Double ?: 0.0).toFloat(),
                 (lm["originY"] as? Double ?: 0.0).toFloat(),
-                (lm["scaleToParent"] as? Double ?: ZoomLevels.THRESHOLD.toDouble()).toFloat(),
+                levelScale,
             )
         }
 
@@ -194,6 +215,8 @@ object DocumentCodec {
             transY = (camMap["transY"] as? Double ?: 0.0).toFloat(),
             level = doc.levelTree.byId(camLevelId) ?: doc.levelTree.root,
         )
+        if (!camera.scale.isFinite() || camera.scale <= 0f ||
+            !camera.transX.isFinite() || !camera.transY.isFinite()) throw JsonError("invalid camera")
 
         doc.layers.clear()
         (root["layers"] as? List<*>)?.forEach { layerAny ->
@@ -220,7 +243,7 @@ object DocumentCodec {
                         (im["alpha"] as? Double ?: 1.0).toFloat().coerceIn(0f, 1f),
                         im["locked"] as? Boolean ?: false,
                         (im["rot"] as? Double ?: 0.0).toFloat(),
-                    )
+                    ).also { it.flipH = im["flipH"] as? Boolean ?: false }
                 )
             }
             (lm["strokes"] as? List<*>)?.forEach { strokeAny ->
@@ -232,6 +255,12 @@ object DocumentCodec {
                     minWidthRatio = (bm?.get("minRatio") as? Double ?: 0.15).toFloat(),
                     color = argbOf(bm?.get("color") as? Double, DEFAULT_COLOR),
                     opacity = (bm?.get("opacity") as? Double ?: 1.0).toFloat(),
+                    angleDeg = (bm?.get("angle") as? Double ?: 0.0).toFloat(),
+                    dashOn = (bm?.get("dashOn") as? Double ?: 0.0).toFloat(),
+                    dashOff = (bm?.get("dashOff") as? Double ?: 0.0).toFloat(),
+                    scatterWorld = (bm?.get("scatter") as? Double ?: 0.0).toFloat(),
+                    spacingWorld = (bm?.get("spacing") as? Double ?: 0.0).toFloat(),
+                    erase = bm?.get("erase") as? Boolean ?: false,
                     // P1.2 fields; absent in older files -> plain opacity brushes
                     pressureOpacity = bm?.get("pOpacity") as? Boolean ?: false,
                     minOpacity = (bm?.get("minOp") as? Double ?: BrushSpec.DEFAULT_MIN_OPACITY.toDouble()).toFloat(),
@@ -324,11 +353,21 @@ object DocumentCodec {
     // ---------------- minimal recursive-descent JSON parser ----------------
     private class Parser(private val s: String) {
         private var i = 0
+        private var depth = 0
+        private var tokens = 0
+
+        fun document(): Any? {
+            val result = value()
+            ws()
+            if (i != s.length) fail("trailing data")
+            return result
+        }
 
         fun value(): Any? {
             ws()
             if (i >= s.length) fail("unexpected end of input")
-            return when (s[i]) {
+            if (++tokens > 4000000 || ++depth > 64) fail("Document complexity limit")
+            return try { when (s[i]) {
                 '{' -> obj()
                 '[' -> arr()
                 '\"' -> str()
@@ -336,7 +375,7 @@ object DocumentCodec {
                 'f' -> { expect("false"); false }
                 'n' -> { expect("null"); null }
                 else -> num()
-            }
+            } } finally { depth-- }
         }
 
         private fun ws() {
@@ -361,6 +400,7 @@ object DocumentCodec {
                 ws()
                 if (i >= s.length || s[i] != ':') fail("expected ':'")
                 i++
+                if (m.containsKey(key)) fail("Duplicate key")
                 m[key] = value()
                 ws()
                 if (i < s.length && s[i] == ',') { i++; continue }
@@ -401,6 +441,12 @@ object DocumentCodec {
                         't' -> sb.append('\t')
                         'r' -> sb.append('\r')
                         'b' -> sb.append('\b')
+                        'u' -> {
+                            if (i + 4 >= s.length) fail("short unicode escape")
+                            val code = s.substring(i + 1, i + 5).toIntOrNull(16) ?: fail("bad unicode escape")
+                            sb.append(code.toChar())
+                            i += 4
+                        }
                         'f' -> sb.append('')
                         else -> fail("bad escape")
                     }
@@ -422,7 +468,7 @@ object DocumentCodec {
             }
             if (i == start) fail("bad number")
             return try {
-                s.substring(start, i).toDouble()
+                s.substring(start, i).toDouble().also { if (!it.isFinite()) fail("non-finite number") }
             } catch (e: NumberFormatException) {
                 fail("bad number")
             }

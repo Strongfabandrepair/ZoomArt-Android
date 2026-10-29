@@ -1,107 +1,81 @@
 package com.example.zoomart.ui.glass
 
+import android.animation.ValueAnimator
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import androidx.dynamicanimation.animation.DynamicAnimation
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
+import com.example.zoomart.R
 
-/**
- * U1/U3 (UI overhaul): the shared spring-physics micro-animation helpers
- * (androidx.dynamicanimation). One stiffness/damping pair everywhere:
- * STIFFNESS_MEDIUM + damping ~0.7 = snappy but visibly settling, the
- * Procreate-like feel. Panel animations only ever touch their own view
- * subtree (decoupling rule) — none of these invalidate the canvas.
- */
+/** Interruptible, local motion. Never animates or invalidates the drawing surface. */
 object Springs {
-
     const val STIFFNESS = SpringForce.STIFFNESS_MEDIUM
-    const val DAMPING = 0.7f
-
-    private fun force(target: Float): SpringForce =
-        SpringForce(target).setStiffness(STIFFNESS).setDampingRatio(DAMPING)
-
-    private fun anim(view: View, property: DynamicAnimation.ViewProperty, target: Float) =
-        SpringAnimation(view, property).apply { spring = force(target) }
-
-    fun springAlpha(view: View, target: Float) { anim(view, DynamicAnimation.ALPHA, target).start() }
-
+    const val DAMPING = 0.82f
+    fun enabled() = ValueAnimator.areAnimatorsEnabled()
+    private fun motions(view: View): MutableMap<DynamicAnimation.ViewProperty, SpringAnimation> {
+        @Suppress("UNCHECKED_CAST")
+        val existing = view.getTag(R.id.motion_state) as? MutableMap<DynamicAnimation.ViewProperty, SpringAnimation>
+        if (existing != null) return existing
+        val state = mutableMapOf<DynamicAnimation.ViewProperty, SpringAnimation>()
+        view.setTag(R.id.motion_state, state)
+        view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) { state.values.toList().forEach { it.cancel() }; state.clear() }
+        })
+        return state
+    }
+    private fun animate(view: View, property: DynamicAnimation.ViewProperty, target: Float,
+        end: (() -> Unit)? = null) {
+        val state = motions(view)
+        state.remove(property)?.cancel()
+        if (!enabled()) { property.setValue(view, target); end?.invoke(); return }
+        val animation = SpringAnimation(view, property).apply {
+            spring = SpringForce(target).setStiffness(STIFFNESS).setDampingRatio(DAMPING)
+            if (property == DynamicAnimation.ALPHA) { setMinValue(0f); setMaxValue(1f) }
+        }
+        state[property] = animation
+        animation.addEndListener { _, cancelled, _, _ ->
+            if (state[property] === animation) state.remove(property)
+            if (!cancelled) end?.invoke()
+        }
+        animation.start()
+    }
+    fun springAlpha(view: View, target: Float) = animate(view, DynamicAnimation.ALPHA, target)
     fun springScale(view: View, target: Float) {
-        anim(view, DynamicAnimation.SCALE_X, target).start()
-        anim(view, DynamicAnimation.SCALE_Y, target).start()
+        animate(view, DynamicAnimation.SCALE_X, target); animate(view, DynamicAnimation.SCALE_Y, target)
     }
-
-    fun springTranslationX(view: View, target: Float) {
-        anim(view, DynamicAnimation.TRANSLATION_X, target).start()
-    }
-
-    fun springTranslationY(view: View, target: Float) {
-        anim(view, DynamicAnimation.TRANSLATION_Y, target).start()
-    }
-
-    /**
-     * Panel show entrance: alpha 0 -> 1, scale 0.9 -> 1 and a small upward
-     * settle. Safe to call repeatedly (springs retarget).
-     */
+    fun springTranslationX(view: View, target: Float) = animate(view, DynamicAnimation.TRANSLATION_X, target)
+    fun springTranslationY(view: View, target: Float) = animate(view, DynamicAnimation.TRANSLATION_Y, target)
     fun showPop(view: View, settleY: Float = 0f) {
-        view.alpha = 0f
-        view.scaleX = 0.9f
-        view.scaleY = 0.9f
-        springAlpha(view, 1f)
-        springScale(view, 1f)
-        springTranslationY(view, settleY)
+        view.alpha = if (enabled()) 0f else 1f
+        view.scaleX = if (enabled()) 0.96f else 1f; view.scaleY = view.scaleX
+        springAlpha(view, 1f); springScale(view, 1f); springTranslationY(view, settleY)
     }
-
-    /**
-     * Tool-selection pulse: a quick scale kick that springs back to 1.
-     */
     fun pulse(view: View) {
-        view.scaleX = 0.85f
-        view.scaleY = 0.85f
+        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        if (enabled()) { view.scaleX = 0.96f; view.scaleY = 0.96f }
         springScale(view, 1f)
     }
-
-    /** U3: animated collapse — fades [view] out and GONEs it at rest. */
-    fun fadeThenGone(view: View) {
-        val anim = SpringAnimation(view, DynamicAnimation.ALPHA, 0f).apply {
-            spring = force(0f)
-        }
-        anim.addEndListener { _, canceled, _, _ ->
-            if (!canceled) {
-                view.visibility = View.GONE
-                view.alpha = 1f
-            }
-        }
-        anim.start()
+    fun tick(view: View) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }
+    fun fadeThenGone(view: View) = animate(view, DynamicAnimation.ALPHA, 0f) {
+        view.visibility = View.GONE; view.alpha = 1f
     }
-
-    /** U3: animated expand — VISIBLE + fade in. */
     fun fadeBackIn(view: View) {
         view.visibility = View.VISIBLE
-        view.alpha = 0f
-        SpringAnimation(view, DynamicAnimation.ALPHA, 1f).apply {
-            spring = force(1f)
-            start()
-        }
+        if (enabled()) view.alpha = 0f
+        springAlpha(view, 1f)
     }
-
-    private val pressListener = View.OnTouchListener { view, event ->
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> springScale(view, 0.92f)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> springScale(view, 1f)
-        }
-        false
-    }
-
-    /**
-     * Attaches spring press feedback to [view]. The listener never consumes
-     * (always returns false), so the view's own click/touch handling runs
-     * exactly as before — the animation composes with, never replaces it.
-     * (View has no OnTouchListener getter, so this REPLACES any listener;
-     * no ZoomArt view installs one — panels use setOnClickListener and the
-     * drag handle overrides onTouchEvent.)
-     */
+    // Return false: View's normal event handling performs the accessible click exactly once.
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     fun attachPressFeedback(view: View) {
-        view.setOnTouchListener(pressListener)
+        view.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> if (v.isEnabled) springScale(v, 0.96f)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> springScale(v, 1f)
+            }
+            false
+        }
     }
 }

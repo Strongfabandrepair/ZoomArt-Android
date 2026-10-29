@@ -289,9 +289,11 @@ class P2LayersTest {
         doc.setLayerLocked(doc.activeLayerIndex, false)
         assertTrue(vm.selectInWorldRect(-5f, -5f, 25f, 5f))
         assertEquals(1, doc.selection.selected.size)
-        doc.undo() // undoes the unlock -> locked again, selection survives
+        doc.undo() // undoing unlock now also clears the stale selection
         assertTrue(doc.layers[doc.activeLayerIndex].locked)
-        assertEquals(1, doc.selection.selected.size)
+        assertEquals(0, doc.selection.selected.size)
+        // Deliberately inject a stale selection to retain coverage of the runtime guard.
+        doc.selection.selected.add(stroke)
 
         val sel = doc.selection
         sel.beginTransform()

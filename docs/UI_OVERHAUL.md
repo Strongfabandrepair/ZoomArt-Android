@@ -1,3 +1,5 @@
+> Historical engineering record. For the current interface and identity, see [User guide](USER_GUIDE.md), [Brand guide](BRAND_GUIDE.md) and [Release readiness](RELEASE_HARDENING.md).
+
 # ZoomArt — UI Overhaul: Procreate-style Glass (U1–U4, v0.6.0)
 
 The 0.6.0 overhaul restyles the verified 0.5.0 app to a modern-minimalist,
@@ -262,3 +264,64 @@ Robolectric note: dynamicanimation keeps its `AnimationHandler` in a
 static ThreadLocal bound to the first method's looper; `GlassPanelTest`
 drops that binding in `@Before` so every method's springs tick (production
 has a single looper and is unaffected).
+
+
+## v0.7.0 REVISION — glass -> Infinite Design / Google Earth language
+
+The user reviewed the 0.6.0 glass UI on the tablet and asked for the
+reference app look instead. The 4 reference screenshots were measured
+pixel-by-pixel with PIL and the derived tokens are the CONTRACT in
+**`docs/UI_STYLE_SPEC.md`** (accent #FFAD01 measured exact; near-black
+chrome #16171B @ 90%; light reading panels #F2F2F2 with #FAFAFA rows and
+#1E1E1E ink; muted wheel ring S=1.0 V=0.65, inner radius 0.56R, center
+swatch 0.22R; 12dp corners; 1px neutral hairlines). Kept machinery:
+FloatingPanel drag + persistence, OverlayLayer isolation, Springs,
+AutoHide pipeline, snapshot-on-show/drag-end — only the visual language
+changed.
+
+What changed:
+
+- **GlassStyle tokens swapped** (same API): frosted 72% scrims ->
+  near-opaque crisp neutral chrome; brand-blue accent -> single amber;
+  corner 28dp -> 12dp; elevation 12 -> 6dp; backdrop blur kept but
+  demoted to a 5dp depth cue (the references read as crisp).
+- **One slim icon strip replaces the grouped text-button docks**: 22
+  hand-written stroke-based vector icons (24dp viewport, strokeWidth 2,
+  24dp content in 48dp targets, no labels/dividers — grouping is pure
+  spacing). contentDescription keeps the legacy label words (a11y +
+  dump-based tests). Active tool = amber tint + 4dp underline dot.
+  Restore of one-tap access: Pick, Select, Flip, Rotate (selection),
+  Import, PNG, Video, Demo, Lazy — plus the Pins panel gets a shell
+  again (7 overlay shells total, unchanged count).
+- **BrushPanel** becomes the light reading panel: dense preset rows
+  (44dp cards, 8dp gaps) with per-preset characteristic stroke previews
+  from the pure `BrushPreviewMath` (JVM-tested); the selected preset
+  renders its preview in amber per brushes2.jpg; slim amber-thumb
+  sliders; the list scrolls inside a capped container so the shell stays
+  compact.
+- **ColorWheelView** becomes the muted hue ring: annulus + center
+  current-color swatch + white marker dot + NEW slim Value slider
+  (0.6.0 hard-wired V=1.0). Geometry extracted to pure `WheelGeometry`
+  (JVM-tested) which also FIXES the 0.6.0 bug where the marker drew
+  90deg away from the touch point (touch and marker now share one
+  convention).
+- **HUD readout**: dark neutral chip, 8dp corner, monochrome text with
+  the LEVEL NUMBER in amber; `cameraReadout()` string unchanged.
+- **Tests**: 200 -> 215 (15 new: WheelGeometryTest 7, BrushPreviewMathTest
+  8). One justified mechanical update in GlassPanelTest: the boot test's
+  panel-height guard now asserts wrap-vs-fill (strictly below the
+  offered AT_MOST space) instead of "under 3/4 of the (tiny 470px
+  Robolectric) screen" — the dense brush list legitimately wraps taller
+  than that synthetic screen; the original MATCH_PARENT-blow-up
+  regression the guard was written for is still asserted.
+
+Device verification (SM-N950U, Android 9 — the Tab S9 FE was not
+attached; see honest notes in the session record): strip near-black with
+48dp icon pitch and amber selected-tool pixels; brush panel light with
+855 amber px on the selected row's preview (0 on unselected rows); wheel
+ring measured live at V=0.65 (0xA6 max-channel) with the amber Value
+slider; HUD amber level number (273 px); chrome pixel share 1% of screen
+vs 4% for the 0.6.0-era screenshot on the same device; 0 FATAL across
+launch+panel-open+pin-pan; gfxinfo janky% 5.21% closed vs 2.83% with the
+panel open (no penalty for open panels); user session sha256 pinned,
+restored byte-identical after testing.

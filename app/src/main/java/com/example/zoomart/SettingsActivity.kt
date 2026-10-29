@@ -61,6 +61,7 @@ class SettingsActivity : AppCompatActivity() {
             setBackgroundColor(Brand.BACKGROUND)
         }
 
+        root.addView(com.example.zoomart.ui.StudioBackdrop(this),FrameLayout.LayoutParams(-1,-1))
         // Responsive branded card.
         val cardW = minOf((screenW * 0.88f).toInt(), (density * 560).toInt())
         val card = FrameLayout(this).apply {
@@ -124,6 +125,11 @@ class SettingsActivity : AppCompatActivity() {
         col.addView(spacer())
 
         // ----- autosave interval -----
+        col.addView(toggleRow("Draw with finger (two fingers to navigate)", AppSettings.getFingerDrawing(this)) {
+            AppSettings.putFingerDrawing(this, it)
+        })
+        col.addView(spacer())
+
         col.addView(sectionRow("Autosave interval", autosaveMsLabel(autosaveMs)))
         val autosaveRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         autosaveLabel = TextView(this).apply {
@@ -161,7 +167,7 @@ class SettingsActivity : AppCompatActivity() {
         col.addView(sectionRow("Dock orientation", if (AppSettings.getDockOrientation(this) == 0) "Horizontal" else "Vertical"))
         val dockOrientRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setGravity(Gravity.CENTER) }
         val dockLabel = TextView(this).apply {
-            text = "Layout"
+            text = if (AppSettings.getDockOrientation(this@SettingsActivity) == 0) "Horizontal" else "Vertical"
             setTextColor(GlassStyle.TEXT_PRIMARY)
             textSize = 14f
         }
@@ -193,7 +199,11 @@ class SettingsActivity : AppCompatActivity() {
 
         card.addView(col)
         root.addView(card)
-        setContentView(root)
+        setContentView(android.widget.ScrollView(this).apply {
+            isFillViewport = true
+            addView(root)
+            WindowInsetsSupport.apply(this)
+        })
 
         mainHandler.postDelayed({
             card.alpha = 0f

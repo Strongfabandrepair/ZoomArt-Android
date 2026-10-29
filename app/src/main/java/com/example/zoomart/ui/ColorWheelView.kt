@@ -1,182 +1,256 @@
 package com.example.zoomart.ui
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.RadialGradient
-import android.graphics.Shader
+import android.graphics.SweepGradient
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
+import android.widget.LinearLayout
+import android.widget.SeekBar
+import android.widget.TextView
+import com.example.zoomart.ui.glass.GlassStyle
+import kotlin.math.hypot
 
 /**
- * v0.7.0: circular color wheel (reference image 3 — "easy color selection").
+ * v0.7.0 REVISION (docs/UI_STYLE_SPEC.md section 5) — the muted hue-RING
+ * wheel from the color-wheel.jpg reference:
  *
- * Hue is mapped around the wheel's circumference (0°=red, 120°=green, 240°=blue,
- * etc.). Saturation is the radial distance from center (center = gray/white,
- * edge = fully saturated). The center dot shows the currently selected color
- * (full saturation at the sampled hue).
+ *   - a hue ANNULUS (inner radius 0.56R, rendered at S=1.0 V=0.65 — the
+ *     measured muted ring, WheelGeometry.RING_VALUE);
+ *   - a CENTER SWATCH disc at 0.22R showing the current color;
+ *   - one small bright marker on the ring at the picked hue/sat;
+ *   - a separate slim amber VALUE slider (0.6.0 hard-wired V=1.0).
  *
- * Purely programmatic — draws into an in-memory bitmap once, then just blits
- * it on each frame (cheap). Touching the wheel picks a hue+sat; dragging
- * updates live.
+ * The pointer math is [WheelGeometry] (JVM-tested) — angle->hue,
+ * radius->saturation — so touch and marker can never disagree (this
+ * fixes the 0.6.0 bug where the marker drew 90deg off the touch).
+ * The HSV model, the `color` property and the live `onColorChanged`
+ * callback keep their exact 0.6.0 semantics.
  */
-class ColorWheelView(context: Context) : View(context) {
+class ColorWheelView(context: Context) : LinearLayout(context) {
 
-    private val wheelPaint = Paint().apply { isAntiAlias = true }
-    private val centerPaint = Paint().apply { isAntiAlias = true }
-    private val borderPaint = Paint().apply {
-        isAntiAlias = true
-        style = Paint.Style.STROKE
-        strokeWidth = 3f
-        color = 0xFF2A2E37.toInt()
-    }
-
-    private var wheelBmp: Bitmap? = null
-    private var wheelSize = 0f
-
-    /** Selected hue [0..360) and saturation [0..1]. Value/alpha fixed at 1.0. */
+    /** Selected hue [0..360), saturation [0..1], value [0..1]. */
     var hue: Float = 0f
+        private set
     var sat: Float = 1f
+        private set
+    var value: Float = 1f
+        private set
 
-    /** Selected color (full alpha). Updated live by the wheel / by setColor(). */
+    /** Selected color (full alpha); setter re-derives hue/sat/value. */
     var color: Int = 0xFF16181D.toInt()
-        set(value) {
-            field = value
-            Color.colorToHSV(value, hsv)
+        set(v) {
+            field = v
+            val hsv = FloatArray(3)
+            Color.colorToHSV(v, hsv)
             hue = hsv[0]
             sat = hsv[1]
-            centerPaint.color = value
-            invalidate()
+            value = hsv[2]
+            if (::valueBar.isInitialized) {
+                valueBar.progress = (value * 100f).toInt().coerceIn(0, 100)
+            }
+            ring.invalidate()
         }
 
-    private val hsv = FloatArray(3)
-
     private var onColorChanged: ((Int) -> Unit)? = null
+
+    private val ring = RingView(
+        context,
+        onPick = { h, s ->
+            hue = h
+            sat = s
+            applyColor()
+        },
+        hueGetter = { hue },
+        satGetter = { sat },
+        swatchGetter = { color },
+    )
+
+    private lateinit var valueBar: SeekBar
+
+    init {
+        orientation = VERTICAL
+        val density = resources.displayMetrics.density
+        val pad = (density * 16).toInt()
+        setPadding(pad, pad, pad, (density * 8).toInt())
+
+        addView(ring, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+
+        // slim value row: the muted ring never reaches V=1 on its own
+        val valueRow = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        valueRow.addView(TextView(context).apply {
+            text = "Value"
+            textSize = 11f
+            setTextColor(GlassStyle.TEXT_SECONDARY)
+        }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 0.22f))
+        valueBar = SeekBar(context).apply {
+            max = 100
+            progress = 100
+            contentDescription = "color value slider"
+            progressTintList = ColorStateList.valueOf(GlassStyle.ACCENT)
+            thumbTintList = ColorStateList.valueOf(GlassStyle.ACCENT)
+            progressBackgroundTintList = ColorStateList.valueOf(0xFF3C3C42.toInt())
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        value = p / 100f
+                        applyColor()
+                    }
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) { }
+                override fun onStopTrackingTouch(sb: SeekBar?) { }
+            })
+        }
+        valueRow.addView(valueBar, LayoutParams(0, LayoutParams.WRAP_CONTENT, 0.78f))
+        addView(valueRow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+
+        // seed h/s/v from the default color
+        val hsv = FloatArray(3)
+        Color.colorToHSV(color, hsv)
+        hue = hsv[0]
+        sat = hsv[1]
+        value = hsv[2]
+    }
+
+    /** Computes the picked color from h/s/v and emits it live. */
+    private fun applyColor() {
+        color = Color.HSVToColor(floatArrayOf(hue, sat, value)) or 0xFF000000.toInt()
+        ring.invalidate()
+        onColorChanged?.invoke(color)
+    }
 
     fun onColorChanged(listener: (Int) -> Unit) {
         onColorChanged = listener
     }
 
-    init {
-        centerPaint.color = color
-        setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-    }
+    /**
+     * The ring itself: annulus + center swatch + marker. Square via
+     * onMeasure; every constant comes from WheelGeometry (measured).
+     */
+    private class RingView(
+        context: Context,
+        private val onPick: (Float, Float) -> Unit,
+        private val hueGetter: () -> Float,
+        private val satGetter: () -> Float,
+        private val swatchGetter: () -> Int,
+    ) : View(context) {
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        val density = resources.displayMetrics.density
-        wheelSize = minOf(w, h).toFloat() * 0.9f
-        rebuildWheel()
-    }
-
-    /** Render the color wheel into a bitmap (once, or when size changes). */
-    private fun rebuildWheel() {
-        if (wheelSize <= 0f) return
-        val s = wheelSize.toInt()
-        wheelBmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)!!
-        val c = Canvas(wheelBmp!!)
-        val cx = s / 2f
-        val cy = s / 2f
-        val radius = s / 2f
-
-        // Draw 360 thin wedges, each at full saturation for its hue.
-        val wedge = Paint().apply { isAntiAlias = true }
-        for (i in 0 until 360) {
-            val h = i.toFloat()
-            wedge.color = Color.HSVToColor(floatArrayOf(h, 1f, 1f))
-            c.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
-                h - 0.5f, 1f, true, wedge)
+        private val ringPaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+        }
+        private val gapPaint = Paint().apply {
+            isAntiAlias = true
+            color = 0xFF1C1D21.toInt() // measured dark chrome between ring+swatch
+        }
+        private val swatchBorderPaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            color = 0xFF3C3C3C.toInt()
+        }
+        private val swatchPaint = Paint().apply { isAntiAlias = true }
+        private val markerPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.WHITE
+        }
+        private val markerBorderPaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            color = 0xFF1E1E1E.toInt()
         }
 
-        // Saturation mask: center is white (sat=0), edge is transparent
-        // so the full-sat wheel shows through but center fades to white.
-        val satMask = Paint().apply {
-            shader = RadialGradient(cx, cy, radius,
-                intArrayOf(0x00FFFFFF, 0xFFFFFFFF.toInt()),
-                floatArrayOf(0f, 1f),
-                Shader.TileMode.CLAMP)
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        private var shaderSet = false
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            // square: side = min(available width, 260dp), floored at 180dp
+            val d = resources.displayMetrics.density
+            val cap = (d * 260f).toInt()
+            val w = View.MeasureSpec.getSize(widthMeasureSpec)
+                .coerceAtMost(cap).coerceAtLeast((d * 180f).toInt())
+            setMeasuredDimension(w, w)
         }
-        c.drawRect(0f, 0f, s.toFloat(), s.toFloat(), satMask)
 
-        // Center dot border
-        c.drawCircle(cx, cy, radius * 0.5f, borderPaint)
-    }
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            rebuildShader()
+        }
 
-    override fun onDraw(canvas: Canvas) {
-        val density = resources.displayMetrics.density
-        wheelBmp?.let { bmp ->
-            val cx = (width / 2f).toFloat()
-            val cy = (height / 2f).toFloat()
-            val left = cx - bmp.width / 2f
-            val top = cy - bmp.height / 2f
-            canvas.drawBitmap(bmp, left, top, wheelPaint)
-
-            // Center dot: selected color
-            val dotRadius = bmp.width * 0.42f
-            val dotLeft = cx - dotRadius
-            val dotTop = cy - dotRadius
-            canvas.drawCircle(cx, cy, dotRadius, centerPaint)
-            canvas.drawCircle(cx, cy, dotRadius, borderPaint)
-
-            // Selection marker: small dot at the hue+sat position on the wheel
-            val angle = Math.toRadians(((hue + 90) % 360).toDouble()).toFloat() // 0° at top
-            val r = sat * bmp.width * 0.45f
-            val mx = cx + cos(angle.toDouble()).toFloat() * r
-            val my = cy - sin(angle.toDouble()).toFloat() * r
-            val markerPaint = Paint().apply {
-                isAntiAlias = true
-                color = Color.WHITE
+        /** One sweep shader around the ring at the measured muted V. */
+        private fun rebuildShader() {
+            if (width <= 0) return
+            val cx = width / 2f
+            val cy = height / 2f
+            val colors = IntArray(13)
+            for (i in 0..12) {
+                colors[i] = Color.HSVToColor(
+                    floatArrayOf((i * 30f) % 360f, 1f, WheelGeometry.RING_VALUE))
             }
-            canvas.drawCircle(mx, my, density * 5f, markerPaint)
-            canvas.drawCircle(mx, my, density * 5f, Paint().apply {
-                style = Paint.Style.STROKE
-                strokeWidth = 2f
-                color = Color.BLACK
-            })
+            ringPaint.shader = SweepGradient(cx, cy, colors, null)
+            shaderSet = true
         }
-    }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                val bmp = wheelBmp ?: return true
-                val cx = (width / 2f).toFloat()
-                val cy = (height / 2f).toFloat()
-                val left = cx - bmp.width / 2f
-                val top = cy - bmp.height / 2f
-                val dx = event.x - (left + bmp.width / 2f)
-                val dy = event.y - (top + bmp.height / 2f)
-                val dist = kotlin.math.sqrt(dx.toDouble() * dx.toDouble() +
-                    dy.toDouble() * dy.toDouble()).toFloat()
-                val radius = bmp.width * 0.45f
+        private fun radii(): FloatArray {
+            val outer = minOf(width, height) / 2f * 0.92f
+            val inner = outer * WheelGeometry.RING_INNER_FRACTION
+            return floatArrayOf(inner, outer)
+        }
 
-                // angle: 0° at top, clockwise
-                var angle = kotlin.math.atan2(-dy.toDouble(), dx.toDouble()).toFloat()
-                angle = if (angle < 0f) angle + 6.2831853f else angle
-                hue = (angle * 360f / 6.2831853f).coerceIn(0f, 360f)
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            if (!shaderSet) rebuildShader()
+            val cx = width / 2f
+            val cy = height / 2f
+            val inner = radii()[0]
+            val outer = radii()[1]
+            val mid = (inner + outer) / 2f
 
-                sat = (dist / radius).coerceIn(0f, 1f)
+            // neutral gap disc under everything (dark chrome)
+            canvas.drawCircle(cx, cy, mid, gapPaint)
+            // the muted hue annulus
+            ringPaint.strokeWidth = outer - inner
+            canvas.drawCircle(cx, cy, mid, ringPaint)
+            // center swatch: the CURRENT color (true V from the slider)
+            val swatchR = outer * WheelGeometry.CENTER_SWATCH_FRACTION
+            swatchPaint.color = swatchGetter()
+            canvas.drawCircle(cx, cy, swatchR, swatchPaint)
+            canvas.drawCircle(cx, cy, swatchR, swatchBorderPaint)
 
-                color = Color.HSVToColor(floatArrayOf(hue, sat, 1f)) or 0xFF000000.toInt()
-                onColorChanged?.invoke(color)
-                invalidate()
-                return true
+            // marker: small white dot with ink border at (hue, sat)
+            val r = WheelGeometry.radiusFromSaturation(satGetter(), inner, outer)
+            val dxy = WheelGeometry.deltaFromHue(hueGetter(), r)
+            val mx = cx + dxy[0]
+            val my = cy + dxy[1]
+            canvas.drawCircle(mx, my, resources.displayMetrics.density * 5f, markerPaint)
+            canvas.drawCircle(mx, my, resources.displayMetrics.density * 5f, markerBorderPaint)
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    val cx = width / 2f
+                    val cy = height / 2f
+                    val inner = radii()[0]
+                    val outer = radii()[1]
+                    val dx = event.x - cx
+                    val dy = event.y - cy
+                    val h = WheelGeometry.hueFromDelta(dx, dy)
+                    val s = WheelGeometry.saturationFromRadius(
+                        hypot(dx.toDouble(), dy.toDouble()).toFloat(), inner, outer)
+                    onPick(h, s)
+                    invalidate()
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> return true
+            return super.onTouchEvent(event)
         }
-        return super.onTouchEvent(event)
-    }
-
-    /** Set color from outside (e.g. initial brush color) — use the `color` property setter. */
-
-    companion object {
     }
 }

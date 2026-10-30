@@ -22,6 +22,8 @@ data class BrushSpec(
     val pressureOpacity: Boolean = false, // P1.2: pressure drives alpha, not just width
     val minOpacity: Float = DEFAULT_MIN_OPACITY, // alpha floor at zero pressure
     val stampShape: StampShape = StampShape.ROUND,
+    val stampFlipX: Boolean = false,
+    val stampFlipY: Boolean = false,
     val erase: Boolean = false,      // v0.7.0: erase-as-modifier — carve instead of draw
 ) {
     /**

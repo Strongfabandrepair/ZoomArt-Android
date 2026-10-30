@@ -185,4 +185,29 @@ class DeviceSmokeTest {
             context.contentResolver.delete(uri, null, null)
         }
     }
+    @Test fun symmetryStylusGestureCommitsFourCopiesAndUndoesTogether() {
+        val v=fixture()
+        main {
+            v.viewModel.symmetry=DrawingViewModel.Symmetry.FOUR_WAY
+            val stylus=MotionEvent.TOOL_TYPE_STYLUS
+            event(v,MotionEvent.ACTION_DOWN,listOf(100f to 100f),listOf(stylus))
+            event(v,MotionEvent.ACTION_MOVE,listOf(250f to 180f),listOf(stylus))
+            event(v,MotionEvent.ACTION_UP,listOf(250f to 180f),listOf(stylus))
+            assertEquals(4,v.viewModel.document.activeLayer.strokes.size)
+            val image=PngExporter.renderViewport(v,320)
+            assertTrue(image.width<=320 && image.height<=320);image.recycle()
+            v.viewModel.undo();assertTrue(v.viewModel.document.activeLayer.strokes.isEmpty())
+        }
+    }
+    @Test fun studioThumbnailRendersOnWorkerWithoutTouchingTheSession() {
+        val context=instrumentation.targetContext
+        val library=ProjectLibrary(File(context.cacheDir,"thumbnail-fixture"))
+        val vm=DrawingViewModel();vm.document.commitStroke(line(Color.BLUE))
+        val entry=library.save("Device preview",SessionWriter.capture(vm.document,vm.camera))
+        lateinit var thumbnails: com.example.zoomart.ui.ProjectThumbnails
+        main { thumbnails=com.example.zoomart.ui.ProjectThumbnails(context) }
+        val image=thumbnails.load(library,entry)!!
+        assertEquals(Color.BLUE,image.getPixel(image.width/2,image.height/2));image.recycle()
+        library.moveToTrash(entry)
+    }
 }

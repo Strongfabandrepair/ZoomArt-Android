@@ -95,6 +95,8 @@ object DocumentCodec {
                 append(",\"pOpacity\":").append(stroke.brush.pressureOpacity)
                 append(",\"minOp\":").append(stroke.brush.minOpacity)
                 append(",\"stampShape\":\"").append(stroke.brush.stampShape.name).append("\"")
+                append(",\"stampFlipX\":").append(stroke.brush.stampFlipX)
+                append(",\"stampFlipY\":").append(stroke.brush.stampFlipY)
                 if (stroke.brush.angleDeg != 0f) append(",\"angle\":").append(stroke.brush.angleDeg)
                 if (stroke.brush.dashOn != 0f) append(",\"dashOn\":").append(stroke.brush.dashOn)
                 if (stroke.brush.dashOff != 0f) append(",\"dashOff\":").append(stroke.brush.dashOff)
@@ -264,6 +266,8 @@ object DocumentCodec {
                     erase = bm?.get("erase") as? Boolean ?: false,
                     // P1.2 fields; absent in older files -> plain opacity brushes
                     pressureOpacity = bm?.get("pOpacity") as? Boolean ?: false,
+                    stampFlipX = bm?.get("stampFlipX") as? Boolean ?: false,
+                    stampFlipY = bm?.get("stampFlipY") as? Boolean ?: false,
                     stampShape = StampShape.values().firstOrNull { it.name == bm?.get("stampShape") } ?: StampShape.ROUND,
                     minOpacity = (bm?.get("minOp") as? Double ?: BrushSpec.DEFAULT_MIN_OPACITY.toDouble()).toFloat(),
                 )

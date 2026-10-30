@@ -1,0 +1,21 @@
+<resources>
+    <string name="search_projects">Search projects</string>
+    <string name="loading_previews">Loading previews…</string>
+    <string name="project_preview">Preview of %1$s</string>
+    <string name="previous_page">Previous</string>
+    <string name="next_page">Next</string>
+    <string name="show_tools">Show tools</string>
+    <string name="hide_tools">Hide tools</string>
+    <string name="drawing_aids">Drawing aids</string>
+    <string name="symmetry">Symmetry · view-centered axes</string>
+    <string name="stabilization">Stabilization</string>
+    <string name="export_preview">Export preview</string>
+    <string name="export_now">Save image</string>
+    <string name="artwork_preview">Artwork preview</string>
+    <string-array name="symmetry_modes">
+        <item>Off</item><item>Mirror left/right</item><item>Mirror top/bottom</item><item>Four-way</item>
+    </string-array>
+    <string-array name="stabilizer_modes">
+        <item>Off</item><item>Rope · bounded trailing distance</item><item>Weighted · soft trailing motion</item><item>Finish · smooth after lifting</item>
+    </string-array>
+</resources>

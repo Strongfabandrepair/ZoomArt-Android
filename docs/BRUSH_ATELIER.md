@@ -6,7 +6,11 @@ The Atelier combines a pale orbital panel, a real-renderer Ink Lab, a horizontal
 
 Ink Lab accepts finger or stylus input without editing the artwork. **Clear** empties it; **Replay** animates a generated pressure sample. Fine tuning includes size, opacity, pressure response, minimum width, nib angle, spacing/scatter, dash length/gap, pressure opacity, eraser size and stabilization. Stamp spacing and dashes are mutually exclusive. Zero pressure response intentionally ignores pressure for width. Personal presets preserve the current ink color when selected and exit erase mode.
 
-The stabilizer uses the same rope model in the pad and canvas: the brush stays within the configured screen-space radius behind the pointer. Live strokes are smoothed; completed stabilized strokes receive smoothing and taper. Cancelling a preview gesture restores the previous preview. Selecting Lazy from the dock is reflected when reopening the Atelier.
+The Rope stabilizer uses the same model in the pad and canvas: the brush stays within the configured screen-space radius behind the pointer. Live strokes are smoothed; completed stabilized strokes receive smoothing and taper. Cancelling a preview gesture restores the previous preview. Selecting Lazy from the dock is reflected when reopening the Atelier.
+
+## Additional drawing aids
+
+More → Drawing aids adds view-centered mirror/four-way ink symmetry and Weighted/Finish stabilization. Ink Lab follows all three stabilization methods. Workspace preferences preserve method, enabled state and strength; appearance presets remain separate. See [workspace tools](WORKSPACE_TOOLS.md) for behavior, persistence and limits.
 
 ## Specialty rendering and persistence
 
@@ -22,7 +26,7 @@ Stylus or stylus-eraser contact on the canvas immediately dismisses all floating
 
 ## Verification and limits
 
-The specialty-brush snapshot passed **259 local tests**, debug/release APK assembly and debug lint. Regressions check dismissal across idle restore, distinct stamp silhouettes and identical rendering after document round trips. Galaxy Tab S9 FE checks covered dismissal, picker visibility/navigation and the Star chain preview; the build is installed on that tablet.
+The current workspace snapshot passed **267 local tests and nine isolated tablet smoke tests**, debug/release APK assembly and debug lint. Regressions check dismissal across idle restore, distinct stamp silhouettes and identical rendering after document round trips. Earlier Galaxy Tab S9 FE checks covered dismissal, picker visibility/navigation and Star chain preview. The current pass added gallery, collapse/expand and PNG-preview UI checks; the build is installed on that tablet.
 
 Earlier instrumentation and software-render measurements are historical evidence in [release hardening](RELEASE_HARDENING.md). This update does not establish physical S Pen latency, full phone/split-screen coverage, localization completion or release-ready dense-scene performance. Specialty stamps are rendered individually and still need representative workload profiling.
 

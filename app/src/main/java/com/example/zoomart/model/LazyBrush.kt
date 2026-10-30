@@ -20,6 +20,8 @@ import kotlin.math.hypot
  * faint ring of the rope radius (screen space, after the scene).
  */
 class LazyBrush(var radiusScreen: Float = 0f) {
+    enum class Mode { ROPE, WEIGHTED, FINISH }
+    var mode = Mode.ROPE
 
     /** Current brush point in SCREEN px (starts at the pen). */
     var brushX = 0f
@@ -46,6 +48,12 @@ class LazyBrush(var radiusScreen: Float = 0f) {
      * -> the brush point IS the pen.
      */
     fun feed(penX: Float, penY: Float): FloatArray {
+        if (mode == Mode.FINISH) { brushX=penX; brushY=penY; return floatArrayOf(penX,penY) }
+        if (mode == Mode.WEIGHTED && radiusScreen > 0f) {
+            val alpha=1f/(1f+radiusScreen/12f)
+            brushX+=(penX-brushX)*alpha; brushY+=(penY-brushY)*alpha
+            return floatArrayOf(brushX,brushY)
+        }
         val r = radiusScreen
         if (r <= 0f) {
             brushX = penX

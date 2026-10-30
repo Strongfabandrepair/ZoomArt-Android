@@ -46,3 +46,7 @@ Decorative motion pauses during drawing, while hidden/unfocused, when system ani
 ## Guide and specialty-brush presentation
 
 The title screen includes an open-book User Guide icon in the same rounded vector style. The offline guide uses native selectable text and a Topics picker. Brush cards and Ink Lab display actual rendered marks, including star, leaf and chisel stamps; a decorative icon must not substitute for a brush preview. The expanded shelf contains 24 presets and a labeled Find a brush entry. Keep labels readable on both the pale shelf and native selection dialog. Pen dismissal is immediate and permanent until reopening; the dock retains its separate idle restoration.
+
+## Workspace previews and drawing aids
+
+Artwork thumbnails are content, not branding: fit them without distortion on a quiet white/neutral field. Gallery cards include visible names and dates and accessible preview descriptions. PNG previews omit editing guides and use the same framing renderer as the export. The dock’s Hide tools / Show tools control must remain readable and reachable in both orientations. Symmetry guides are editing aids only and must not appear in preview images or exports. See [workspace tools](WORKSPACE_TOOLS.md).

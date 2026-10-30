@@ -27,7 +27,8 @@ class BrushPanel(
     private var lazyOn = false
     private var lazyRadius = 60f
     private lateinit var lazyToggle: Button
-    fun syncStabilizer(enabled: Boolean, radius: Float) {
+    fun syncStabilizer(enabled: Boolean, radius: Float, mode: LazyBrush.Mode = LazyBrush.Mode.ROPE) {
+        preview.setStabilizerMode(mode)
         lazyOn = enabled; lazyRadius = radius
         lazyToggle.text = if (enabled) "Stabilizer · ON" else "Stabilizer · OFF"
         preview.setStabilizer(enabled, radius)
@@ -204,7 +205,7 @@ class BrushPanel(
         saved.forEach { (name,b) -> array.put(JSONObject().put("name",name).put("width",b.baseWidthWorld)
             .put("pressure",b.pressureResponse).put("minWidth",b.minWidthRatio).put("opacity",b.opacity)
             .put("angle",b.angleDeg).put("on",b.dashOn).put("off",b.dashOff).put("scatter",b.scatterWorld)
-            .put("stampShape",b.stampShape.name).put("spacing",b.spacingWorld).put("pressureOpacity",b.pressureOpacity).put("minOpacity",b.minOpacity)) }
+            .put("stampFlipX",b.stampFlipX).put("stampFlipY",b.stampFlipY).put("stampShape",b.stampShape.name).put("spacing",b.spacingWorld).put("pressureOpacity",b.pressureOpacity).put("minOpacity",b.minOpacity)) }
         prefs.edit().putString("presets",array.toString()).apply()
     }
     private fun loadSaved() {
@@ -217,6 +218,7 @@ class BrushPanel(
                     opacity=b.getDouble("opacity").toFloat(), angleDeg=b.getDouble("angle").toFloat(),
                     dashOn=b.getDouble("on").toFloat(),dashOff=b.getDouble("off").toFloat(),
                     scatterWorld=b.getDouble("scatter").toFloat(),spacingWorld=b.getDouble("spacing").toFloat(),
+                    stampFlipX=b.optBoolean("stampFlipX"),stampFlipY=b.optBoolean("stampFlipY"),
                     stampShape=StampShape.values().firstOrNull { it.name == b.optString("stampShape") } ?: StampShape.ROUND,
                     pressureOpacity=b.getBoolean("pressureOpacity"),minOpacity=b.getDouble("minOpacity").toFloat()))
             }
@@ -271,6 +273,7 @@ class PreviewStrip(context: Context) : View(context) {
     private var pointer = -1
     private val stabilizer = LazyBrush()
     private var stabilized = false
+    fun setStabilizerMode(mode: LazyBrush.Mode) { if(stabilizer.mode != mode) { stabilizer.mode=mode; replay() } }
     fun clear() { animation?.cancel(); reveal=1f; sample=StrokeData(spec.scaledForLocalScale(1f/density)); invalidate() }
     fun setStabilizer(enabled: Boolean, radius: Float) {
         if (stabilized == (enabled && radius > 0f) && stabilizer.radiusScreen == (if (enabled) radius else 0f)) return
@@ -282,7 +285,7 @@ class PreviewStrip(context: Context) : View(context) {
     fun setSpec(value: BrushSpec) { animation?.cancel(); reveal = 1f; spec = value; resetSample(); invalidate() }
     private fun resetSample() {
         sample = StrokeData(spec.scaledForLocalScale(1f / density))
-        val rope = LazyBrush(if (stabilized) stabilizer.radiusScreen else 0f)
+        val rope = LazyBrush(if (stabilized) stabilizer.radiusScreen else 0f).also { it.mode=stabilizer.mode }
         for (i in 0..100) {
             val t = i / 100f
             val x = width*(0.08f+0.84f*t)
@@ -309,7 +312,7 @@ class PreviewStrip(context: Context) : View(context) {
         var x = 12*density
         while (x < width) { var y = 12*density; while (y < height) { canvas.drawCircle(x,y,0.65f*density,paint); y += 16*density }; x += 16*density }
         canvas.save(); canvas.clipRect(0f,0f,width*reveal,height.toFloat())
-        renderer.drawStroke(canvas,sample,1f, if (stabilized && drawing) LazyBrush.smoothPoints(sample.points) else null); canvas.restore()
+        renderer.drawStroke(canvas,sample,1f, if (stabilized && drawing && stabilizer.mode != LazyBrush.Mode.FINISH) LazyBrush.smoothPoints(sample.points) else null); canvas.restore()
     }
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when(event.actionMasked) {

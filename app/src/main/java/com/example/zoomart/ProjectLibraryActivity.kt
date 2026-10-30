@@ -15,6 +15,10 @@ class ProjectLibraryActivity : AppCompatActivity() {
     private lateinit var library: ProjectLibrary
     private lateinit var list: LinearLayout
     private var deleted=false
+    private var page=0
+    private var query=""
+    @Volatile private var generation=0
+    private lateinit var thumbnails: com.example.zoomart.ui.ProjectThumbnails
     private var exporting: ProjectLibrary.Entry?=null
     private val importFile=registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if(uri!=null) work { contentResolver.openInputStream(uri)!!.use { library.importArchive(it,getString(R.string.imported_project)) } }
@@ -25,11 +29,14 @@ class ProjectLibraryActivity : AppCompatActivity() {
     }
     override fun onSaveInstanceState(out: Bundle) {
         out.putBoolean("trash",deleted);out.putString("exportPath",exporting?.file?.path)
+        out.putInt("page",page);out.putString("query",query)
         super.onSaveInstanceState(out)
     }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state); library=ProjectLibrary(filesDir)
+        thumbnails=com.example.zoomart.ui.ProjectThumbnails(this)
         deleted=state?.getBoolean("trash") ?: false
+        page=state?.getInt("page") ?: 0;query=state?.getString("query") ?: ""
         exporting=state?.getString("exportPath")?.let { ProjectLibrary.Entry(File(it),"") }
         val density=resources.displayMetrics.density
         val root=LinearLayout(this).apply {
@@ -50,6 +57,17 @@ class ProjectLibraryActivity : AppCompatActivity() {
         action(R.string.import_project) { importFile.launch(arrayOf("application/zip","application/octet-stream","*/*")) }
         action(R.string.trash_projects) { deleted=!deleted;refresh() }
         root.addView(actions)
+        root.addView(EditText(this).apply {
+            hint=getString(R.string.search_projects); setTextColor(-1); setHintTextColor(0xFFCCCCCC.toInt())
+            isSingleLine=true;setText(query)
+            addTextChangedListener(object: android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?,start: Int,count: Int,after: Int) {}
+                override fun onTextChanged(s: CharSequence?,start: Int,before: Int,count: Int) {
+                    query=s.toString(); page=0; if(::list.isInitialized) refresh()
+                }
+                override fun afterTextChanged(s: android.text.Editable?) {}
+            })
+        },LinearLayout.LayoutParams(-1,-2))
         list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         root.addView(ScrollView(this).apply { addView(list) },LinearLayout.LayoutParams(-1,0,1f))
         val scene=FrameLayout(this).apply {
@@ -70,18 +88,52 @@ class ProjectLibraryActivity : AppCompatActivity() {
         }
     }
     private fun refresh() {
+        val ticket=++generation
+        val showDeleted=deleted; val filter=query; val requestedPage=page
+        list.removeAllViews()
+        list.addView(TextView(this).apply { setText(R.string.loading_previews); setTextColor(-1) })
         worker.execute {
-            val result=runCatching { library.entries(deleted) }
+            if(ticket!=generation || isDestroyed) return@execute
+            val result=runCatching { library.entries(showDeleted).filter { it.name.contains(filter,ignoreCase=true) } }
+            val entries=result.getOrDefault(emptyList())
+            val currentPage=requestedPage.coerceIn(0,((entries.size-1)/24).coerceAtLeast(0))
+            val previews=entries.drop(currentPage*24).take(24).map { entry ->
+                entry to if(Thread.currentThread().isInterrupted || ticket!=generation) null else thumbnails.load(library,entry)
+            }
             runOnUiThread {
-                if(isDestroyed) return@runOnUiThread
-                list.removeAllViews()
-                result.getOrDefault(emptyList()).forEach { entry ->
-                    list.addView(Button(this).apply {
-                        text=entry.name;isAllCaps=false;minHeight=(64*resources.displayMetrics.density).toInt()
+                if(isDestroyed || ticket!=generation) return@runOnUiThread
+                page=currentPage; list.removeAllViews()
+                val density=resources.displayMetrics.density
+                previews.forEach { (entry,preview) ->
+                    val card=LinearLayout(this).apply {
+                        orientation=LinearLayout.HORIZONTAL; gravity=android.view.Gravity.CENTER_VERTICAL
+                        setPadding((8*density).toInt(),(8*density).toInt(),(8*density).toInt(),(8*density).toInt())
+                        isClickable=true; isFocusable=true; contentDescription=entry.name
                         setOnClickListener { options(entry) }
-                    },LinearLayout.LayoutParams(-1,-2))
+                        background=android.graphics.drawable.GradientDrawable().apply { setColor(0xFFFAF7F3.toInt());cornerRadius=16*density }
+                    }
+                    card.addView(ImageView(this).apply {
+                        scaleType=ImageView.ScaleType.FIT_CENTER
+                        setBackgroundColor(0xFFEEEEEE.toInt())
+                        if(preview!=null) setImageBitmap(preview) else setImageResource(R.drawable.ic_image)
+                        contentDescription=getString(R.string.project_preview,entry.name)
+                    },LinearLayout.LayoutParams((112*density).toInt(),(84*density).toInt()))
+                    card.addView(TextView(this).apply {
+                        text=entry.name+"\n"+java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(entry.file.lastModified()))
+                        textSize=16f; setTextColor(0xFF242635.toInt()); setPadding((12*density).toInt(),0,0,0)
+                    },LinearLayout.LayoutParams(0,-2,1f))
+                    list.addView(card,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=(8*density).toInt() })
                 }
-                if(list.childCount==0) list.addView(TextView(this).apply { setText(R.string.no_projects);setTextColor(-1);textSize=16f })
+                if(previews.isEmpty()) list.addView(TextView(this).apply {
+                    text=if(result.isFailure) getString(R.string.project_failed) else getString(R.string.no_projects)
+                    setTextColor(-1); textSize=16f
+                })
+                if(entries.size>24) {
+                    val paging=LinearLayout(this)
+                    paging.addView(Button(this).apply { setText(R.string.previous_page); isEnabled=page>0; setOnClickListener { page--;refresh() } },LinearLayout.LayoutParams(0,-2,1f))
+                    paging.addView(Button(this).apply { setText(R.string.next_page); isEnabled=(page+1)*24<entries.size; setOnClickListener { page++;refresh() } },LinearLayout.LayoutParams(0,-2,1f))
+                    list.addView(paging)
+                }
             }
         }
     }
@@ -99,5 +151,5 @@ class ProjectLibraryActivity : AppCompatActivity() {
             }
         }.show()
     }
-    override fun onDestroy() { worker.shutdown();super.onDestroy() }
+    override fun onDestroy() { generation++; worker.shutdownNow();super.onDestroy() }
 }

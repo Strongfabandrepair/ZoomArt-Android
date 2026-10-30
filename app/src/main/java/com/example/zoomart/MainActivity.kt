@@ -111,6 +111,13 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         canvasView = ZoomableCanvasView(this)
+        val workspace=getSharedPreferences("workspace_ui",MODE_PRIVATE)
+        canvasView.viewModel.symmetry=com.example.zoomart.model.DrawingViewModel.Symmetry.values()[workspace.getInt("symmetry",0).coerceIn(0,3)]
+        val smoothing=workspace.getInt("stabilizer",0).coerceIn(0,3)
+        canvasView.viewModel.lazyEnabled=smoothing>0
+        canvasView.viewModel.lazyBrush.mode=com.example.zoomart.model.LazyBrush.Mode.values()[
+            workspace.getInt("stabilizer_mode",(smoothing-1).coerceAtLeast(0)).coerceIn(0,2)]
+        canvasView.viewModel.lazyBrush.radiusScreen=workspace.getFloat("stabilizer_radius",60f).coerceIn(0f,200f)
         brushPanel = BrushPanel(
             this,
             // v0.7.0: selecting a preset resets erase (smart switch back to draw).
@@ -128,6 +135,7 @@ class MainActivity : AppCompatActivity() {
             { on, radius ->
                 canvasView.viewModel.lazyEnabled = on
                 canvasView.viewModel.lazyBrush.radiusScreen = radius
+                saveDrawingAids()
             },
         )
         layersPanel = LayersPanel(this, canvasView) { refreshToolbar() }
@@ -329,13 +337,14 @@ class MainActivity : AppCompatActivity() {
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Export image")
                 .setItems(arrayOf("Current view (keep zoomed detail)", "Entire drawing")) { _, which ->
-                    exportPng(entireDrawing = which == 1)
+                    previewPng(entireDrawing = which == 1)
                 }.setNegativeButton("Cancel", null).show()
         }
         stripChip(row, R.drawable.ic_video, "Video") { exportVideo() }
         stripChip(row, R.drawable.ic_demo, "Demo") { canvasView.runDemo() }
 
-        val secondary = listOf("Pick", "Shapes", "Blend", "Lazy", "Image", "Pins", "Import", "Clear", "Zoom out", "Zoom in", "PNG", "Video", "Demo")
+        stripChip(row, R.drawable.ic_lazy, getString(R.string.drawing_aids)) { showDrawingAids() }
+        val secondary = listOf(getString(R.string.drawing_aids), "Pick", "Shapes", "Blend", "Lazy", "Image", "Pins", "Import", "Clear", "Zoom out", "Zoom in", "PNG", "Video", "Demo")
         secondary.forEach { (stripChips[it]?.parent as? View)?.visibility = View.GONE }
         stripChip(row, R.drawable.ic_more, getString(R.string.more_tools)) {
             val actions = secondary.mapNotNull { stripChips[it] }
@@ -354,7 +363,21 @@ class MainActivity : AppCompatActivity() {
         }
         val dock = FloatingPanel(this, "Dock",
             { p -> snapshotter.snapshot(p) }, kind = FloatingPanel.Kind.DOCK)
-        dock.setContent(scroll)
+        val dockContent=LinearLayout(this).apply { orientation=if(vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
+        val preferences=getSharedPreferences("workspace_ui",MODE_PRIVATE)
+        var collapsed=preferences.getBoolean("dock_collapsed",false)
+        val toggle=android.widget.Button(this).apply {
+            isAllCaps=false; minHeight=(48*density).toInt()
+            fun update() {
+                setText(if(collapsed) R.string.show_tools else R.string.hide_tools)
+                contentDescription=text; scroll.visibility=if(collapsed) View.GONE else View.VISIBLE
+            }
+            update()
+            setOnClickListener { collapsed=!collapsed; preferences.edit().putBoolean("dock_collapsed",collapsed).apply();update();Springs.pulse(this) }
+        }
+        dockContent.addView(toggle,LinearLayout.LayoutParams(-2,-2))
+        dockContent.addView(scroll,LinearLayout.LayoutParams(-2,if(vertical) (resources.displayMetrics.heightPixels*0.62f).toInt() else -2))
+        dock.setContent(dockContent)
         overlay.setDock(dock, if (vertical) Gravity.START or Gravity.CENTER_VERTICAL
             else Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
 
@@ -533,7 +556,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun togglePanel(panel: View) {
         val shell = shellOf[panel] ?: return
-        if (panel === brushPanel) brushPanel.syncStabilizer(canvasView.viewModel.lazyEnabled, canvasView.viewModel.lazyBrush.radiusScreen)
+        if (panel === brushPanel) brushPanel.syncStabilizer(canvasView.viewModel.lazyEnabled, canvasView.viewModel.lazyBrush.radiusScreen,canvasView.viewModel.lazyBrush.mode)
         val wasOpen = shell.isShowing
         // Dismiss all other panel shells first (one panel at a time)
         for (s in listOf(brushPanel, layersPanel, pinsPanel, shapesPanel, blendPanel, imagePanel)) {
@@ -548,9 +571,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** P4.4: quick lazy-stabilizer toggle (mirrors the Brush panel control). */
+    private fun saveDrawingAids() {
+        val vm=canvasView.viewModel
+        getSharedPreferences("workspace_ui",MODE_PRIVATE).edit()
+            .putInt("stabilizer",if(vm.lazyEnabled) vm.lazyBrush.mode.ordinal+1 else 0)
+            .putInt("stabilizer_mode",vm.lazyBrush.mode.ordinal)
+            .putFloat("stabilizer_radius",vm.lazyBrush.radiusScreen).apply()
+    }
+    private fun showDrawingAids() {
+        val vm=canvasView.viewModel
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.drawing_aids)
+            .setItems(arrayOf(getString(R.string.symmetry),getString(R.string.stabilization))) { _,which ->
+                if(which==0) {
+                    val labels=resources.getStringArray(R.array.symmetry_modes)
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.symmetry)
+                        .setSingleChoiceItems(labels,vm.symmetry.ordinal) { dialog,index ->
+                            vm.symmetry=com.example.zoomart.model.DrawingViewModel.Symmetry.values()[index]
+                            getSharedPreferences("workspace_ui",MODE_PRIVATE).edit().putInt("symmetry",index).apply()
+                            canvasView.invalidate();dialog.dismiss()
+                        }.setNegativeButton(android.R.string.cancel,null).show()
+                } else {
+                    val labels=resources.getStringArray(R.array.stabilizer_modes)
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.stabilization)
+                        .setSingleChoiceItems(labels,if(vm.lazyEnabled) vm.lazyBrush.mode.ordinal+1 else 0) { dialog,index ->
+                            vm.lazyEnabled=index>0
+                            if(index>0) vm.lazyBrush.mode=com.example.zoomart.model.LazyBrush.Mode.values()[index-1]
+                            if(vm.lazyBrush.radiusScreen<=0) vm.lazyBrush.radiusScreen=60f
+                            saveDrawingAids()
+                            brushPanel.syncStabilizer(vm.lazyEnabled,vm.lazyBrush.radiusScreen,vm.lazyBrush.mode)
+                            refreshToolbar();dialog.dismiss()
+                        }.setNegativeButton(android.R.string.cancel,null).show()
+                }
+            }.show()
+    }
+
     private fun toggleLazy() {
         val vm = canvasView.viewModel
         vm.lazyEnabled = !vm.lazyEnabled
+        if(vm.lazyEnabled && vm.lazyBrush.radiusScreen<=0f) vm.lazyBrush.radiusScreen=60f
+        saveDrawingAids()
         toast(if (vm.lazyEnabled) "Lazy stabilizer ON (radius in Brush panel)"
               else "Lazy stabilizer OFF")
         refreshToolbar()
@@ -745,6 +804,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun previewImage(bitmap: Bitmap) = android.widget.ImageView(this).apply {
+        setImageBitmap(bitmap); adjustViewBounds=true; scaleType=android.widget.ImageView.ScaleType.FIT_CENTER
+        maxHeight=(240*resources.displayMetrics.density).toInt()
+        contentDescription=getString(R.string.artwork_preview)
+    }
+
+    private fun thumbnail(source: Bitmap): Bitmap {
+        val factor=384f/maxOf(source.width,source.height)
+        val scaled=Bitmap.createScaledBitmap(source,(source.width*factor).toInt().coerceAtLeast(1),(source.height*factor).toInt().coerceAtLeast(1),true)
+        return if(scaled===source) source.copy(Bitmap.Config.ARGB_8888,false) else scaled
+    }
+
+    private fun previewPng(entireDrawing: Boolean) {
+        if(exportRunning) return
+        val snapshot=try { exportSnapshot() } catch(e: Exception) { toast(e.message ?: "Could not prepare preview");return }
+        exportRunning=true
+        Thread {
+            val result=runCatching { if(entireDrawing) PngExporter.renderBitmap(snapshot,512) else PngExporter.renderViewport(snapshot,512) }
+            runOnUiThread {
+                exportRunning=false
+                if(isDestroyed || isFinishing) { result.getOrNull()?.recycle();return@runOnUiThread }
+                val image=result.getOrNull()
+                if(image==null) { toast("Could not render preview");return@runOnUiThread }
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.export_preview)
+                    .setView(previewImage(image)).setNegativeButton(android.R.string.cancel,null)
+                    .setPositiveButton(R.string.export_now) { _,_ -> exportPng(entireDrawing) }.show()
+            }
+        }.start()
+    }
+
     private fun exportPng(entireDrawing: Boolean = false) {
         if (exportRunning) return
         val snapshot = try { exportSnapshot() } catch (e: Exception) {
@@ -756,6 +845,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val name = "zoomart_" + System.currentTimeMillis() + ".png"
                 val bmp = if (entireDrawing) PngExporter.renderBitmap(snapshot) else PngExporter.renderViewport(snapshot)
+                val preview=thumbnail(bmp)
                 val where = try { MediaSaver.saveToGallery(this@MainActivity, bmp, name)
                     ?: run {
                         val dir = getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: File(filesDir, "exports")
@@ -768,7 +858,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } finally { bmp.recycle() }
                 Log.i(TAG, "PNG saved: " + where)
-                runOnUiThread { showExportResult(where, "image/png") }
+                runOnUiThread { showExportResult(where, "image/png",preview) }
             } catch (t: Throwable) {
                 Log.e(TAG, "PNG export failed", t)
                 runOnUiThread { toast("PNG export failed: " + t.message) }
@@ -798,7 +888,14 @@ class MainActivity : AppCompatActivity() {
                 ZoomVideoExporter.export(snapshot, bookmarks, file)
                 val where = MediaSaver.saveVideoToGallery(this@MainActivity, file) ?: file.absolutePath
                 Log.i(TAG, "Video saved: " + file.absolutePath)
-                runOnUiThread { showExportResult(where, "video/mp4") }
+                val preview=runCatching {
+                    val retriever=android.media.MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(file.path)
+                        retriever.getFrameAtTime(0)?.let { frame -> try { thumbnail(frame) } finally { frame.recycle() } }
+                    } finally { retriever.release() }
+                }.getOrNull()
+                runOnUiThread { showExportResult(where, "video/mp4",preview) }
             } catch (t: Throwable) {
                 Log.e(TAG, "Video export failed", t)
                 runOnUiThread { toast("Video export failed: " + t.message) }
@@ -810,11 +907,12 @@ class MainActivity : AppCompatActivity() {
 
     // ----- session persistence -----
 
-    private fun showExportResult(where: String, mime: String) {
-        if (isFinishing || isDestroyed) return
+    private fun showExportResult(where: String, mime: String, preview: Bitmap? = null) {
+        if (isFinishing || isDestroyed) { preview?.recycle();return }
         val gallery = where.startsWith("content:")
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(if (mime == "image/png") "Image saved" else "Video saved")
+            .setView(preview?.let { previewImage(it) })
             .setMessage(if (gallery) "Saved to your gallery's ZoomArt folder."
                 else "Saved on this device. Use Share to send it or save a copy to your files.")
             .setNegativeButton("Done", null)

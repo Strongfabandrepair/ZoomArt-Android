@@ -18,11 +18,13 @@ This is a development build, currently **0.7.0**, for **Android 8.0+ (API 26)**,
 
 - Pressure-sensitive stylus drawing, optional finger drawing, pan/pinch navigation and cancellation rollback.
 - Brush Atelier with 24 built-in brushes, a labeled picker, live ink trials, Clear/Replay, personal presets and pressure/stabilization controls. Specialty stamps include stars, leaves and chisels; textures include charcoal grain, pastel dust and ink spatter.
+- Collapsible dock with remembered state, mirror/four-way ink symmetry with grouped Undo, and Rope/Weighted/Finish stabilization.
 - Floating panels close immediately on stylus contact and stay closed until reopened. The dock retains its separate automatic hide/restore behavior.
 - Offline User Guide on the title screen, with Topics navigation and instructions bundled from this repository.
 - Layers, shape tools, image tracing, selections, swept vector erasing, bookmark flights and undo/redo.
+- Searchable studio gallery with cached artwork thumbnails, dates and bounded pagination.
 - Background session serialization and atomic replacement, named project checkpoints, recoverable trash and portable `.zoomart` archives with image assets.
-- PNG export of the current view or entire drawing, plus MP4 bookmark tours.
+- PNG framing previews before saving, image thumbnails after export, and MP4 bookmark tours with poster frames when available.
 - A shared orbital theme with reduced ambient motion on controls, system-animation and Battery Saver handling, and a consistent vector icon family.
 
 ## Build and verify
@@ -54,9 +56,9 @@ The full device suite includes an isolated drawing frame profile. For functional
 
 ## Verification and limits
 
-The current specialty-brush snapshot passed **259 local tests**, debug/release APK assembly and debug lint with zero errors. Tablet checks on the **Galaxy Tab S9 FE / Android 16** covered permanent stylus dismissal, the brush picker and Star chain preview. Regression tests cover distinct stamp silhouettes and saved-project rendering. The final app is installed on the tablet.
+The 30 October workspace snapshot passed **267 local tests**, **nine isolated tablet smoke tests**, debug/release APK assembly and debug lint with zero errors. Galaxy Tab S9 FE / Android 16 UI checks covered studio thumbnails, toolbar collapse/expand, drawing-aids navigation and PNG framing preview. Regression tests cover symmetry grouping/cancellation, duplicate-axis suppression, smoothing modes, thumbnail caching and toolbar recreation.
 
-Earlier branding verification included eight tablet instrumentation tests and release-bundle/release-lint checks; those results belong to that earlier snapshot. Production signing and remote CI execution remain unverified.
+Release-bundle and release-lint results from earlier snapshots remain historical; this pass did not rerun the full frame profile. Production signing and remote CI execution remain unverified.
 
 Dense drawings remain a performance concern: a 10,000-stroke workload improved substantially but still measured roughly 114–150 ms median frame duration in earlier device runs. Full localization, accessibility auditing, actual split-screen/phone coverage, process-death durability and resumable archive operations remain unfinished. See the release-readiness report for details rather than treating passing tests as release certification.
 

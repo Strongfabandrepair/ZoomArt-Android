@@ -4,7 +4,16 @@
 
 The application still reports version 0.7.0. This snapshot consolidates the preceding working changes and updates its identity and documentation; it is not a store release.
 
-### Latest: specialty brushes and persistent panel dismissal
+### Latest: gallery previews and drawing aids — 30 October 2026
+
+- Studio artwork thumbnails, modification dates, name search, 24-card pagination and a capped private thumbnail cache.
+- PNG framing preview with explicit Save/Cancel; completed PNG thumbnails and video poster frames where available.
+- Remembered Hide tools / Show tools toolbar state in either dock orientation.
+- View-centered left/right, top/bottom and four-way ink symmetry, live copies, one-step Undo/Redo and cancellation rollback; strokes exactly on a mirror axis are not double-deposited.
+- Weighted trailing and finish-only smoothing alongside the rope stabilizer, shared with Ink Lab; workspace choices and strength persist.
+- Verification: 267 local tests, nine isolated Galaxy Tab S9 FE smoke tests, debug/release APK assembly and debug lint passed. UI inspections covered gallery thumbnails, collapsed toolbar, aids menu and PNG preview.
+
+### Previous: specialty brushes and persistent panel dismissal
 
 - Expanded the built-in shelf from 9 to 24 brushes, with a labeled **Find a brush** picker.
 - Added Technical pen, Expressive ink, Broad nib, Charcoal grain, Graphite shade, Pastel dust, Ink spatter, Mist, Stipple, Stitch, Stardust, Star chain, Foliage, Confetti and Dry chisel.

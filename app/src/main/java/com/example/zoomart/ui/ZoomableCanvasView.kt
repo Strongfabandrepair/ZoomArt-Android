@@ -462,6 +462,8 @@ class ZoomableCanvasView @JvmOverloads constructor(
             Tool.DRAW -> {
                 // P3.2: DRAW always enters through the SCREEN-space API so
                 // the lazy rope (screen px) can feed the committed points.
+                viewModel.symmetryCenterX = viewModel.camera.screenToLocalX(width/2f)
+                viewModel.symmetryCenterY = viewModel.camera.screenToLocalY(height/2f)
                 viewModel.beginStrokeAtScreen(x, y, pressure)
                 lastPenScreenX=x;lastPenScreenY=y
                 isDrawing = true
@@ -989,6 +991,11 @@ class ZoomableCanvasView @JvmOverloads constructor(
         canvas.rotate(canvasRotationDegrees, width / 2f, height / 2f)
         canvas.drawColor(Color.WHITE)
         drawScene(canvas)
+        if (viewModel.symmetry != DrawingViewModel.Symmetry.OFF) {
+            val guide=lazyPaint
+            if(viewModel.symmetry != DrawingViewModel.Symmetry.HORIZONTAL) canvas.drawLine(width/2f,0f,width/2f,height.toFloat(),guide)
+            if(viewModel.symmetry != DrawingViewModel.Symmetry.VERTICAL) canvas.drawLine(0f,height/2f,width.toFloat(),height/2f,guide)
+        }
         drawSelectionOverlay(canvas)
         drawLazyOverlay(canvas)
         drawEraserPreview(canvas)
@@ -1078,7 +1085,7 @@ class ZoomableCanvasView @JvmOverloads constructor(
      * overlay). Hidden when the stabilizer is off.
      */
     private fun drawLazyOverlay(canvas: Canvas) {
-        if (!viewModel.lazyActive) return
+        if (!viewModel.lazyActive || viewModel.lazyBrush.mode == LazyBrush.Mode.FINISH) return
         if (!isDrawing || !penGesture || gestureTool != Tool.DRAW) return
         val brushX = viewModel.lazyBrush.brushX
         val brushY = viewModel.lazyBrush.brushY
@@ -1194,9 +1201,10 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 drawSmudgesOfLevel(canvas, layer, pass.level.id, 1f)
                 if (includeInProgress && layer === doc.activeLayer) {
                     viewModel.inProgress?.takeIf { it.levelId == pass.level.id }?.let { stroke ->
-                        val pts = if (viewModel.lazyActive && stroke.points.size >= 2)
+                        val pts = if (viewModel.lazyActive && viewModel.lazyBrush.mode != LazyBrush.Mode.FINISH && stroke.points.size >= 2)
                             LazyBrush.smoothPoints(stroke.points.toList()) else null
                         drawStroke(canvas, stroke, 1f, pts)
+                        viewModel.symmetryCopies(stroke, pts ?: stroke.points).forEach { drawStroke(canvas,it,1f,it.points) }
                     }
                     viewModel.inProgressShape?.takeIf { it.levelId == pass.level.id }?.let {
                         drawShape(canvas, it, 1f)
@@ -1449,7 +1457,8 @@ class ZoomableCanvasView @JvmOverloads constructor(
                 strokeFillPaint.alpha = ((strokeFillPaint.alpha / 255f) * alpha * 255f).toInt().coerceIn(0, 255)
                 val rStamp = size.coerceAtLeast(1f)
                 canvas.save()
-                canvas.translate(x + ox, y + oy)
+                canvas.translate(x + if(brush.stampFlipX) -ox else ox, y + if(brush.stampFlipY) -oy else oy)
+                canvas.scale(if(brush.stampFlipX) -1f else 1f, if(brush.stampFlipY) -1f else 1f)
                 canvas.rotate(brush.angleDeg)
                 when (brush.stampShape) {
                     com.example.zoomart.model.StampShape.ROUND -> canvas.drawCircle(0f,0f,rStamp,strokeFillPaint)

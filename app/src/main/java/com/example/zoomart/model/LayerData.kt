@@ -290,6 +290,17 @@ class DrawingDocument {
      * or when the active layer is locked (P2.2 — the panel can flip the lock
      * mid-gesture via a second finger, so the final commit re-checks).
      */
+    /** A symmetry gesture is a single atomic undo step. */
+    fun commitStrokeGroup(strokes: List<StrokeData>): Boolean {
+        if (activeLayer.locked || strokes.isEmpty() || strokes.any { it.points.size < 2 }) return false
+        val commands = strokes.map { AddStrokeCommand(this, activeLayer, it) }
+        execute(object : Command {
+            override fun redo() { commands.forEach { it.redo() } }
+            override fun undo() { commands.asReversed().forEach { it.undo() } }
+        })
+        return true
+    }
+
     fun commitStroke(stroke: StrokeData): Boolean {
         if (stroke.points.size < 2) return false
         if (activeLayer.locked) return false

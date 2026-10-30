@@ -10,6 +10,33 @@ class DrawingViewModel(
     val camera: Camera = Camera(),
     var document: DrawingDocument = DrawingDocument(),
 ) {
+    enum class Symmetry { OFF, VERTICAL, HORIZONTAL, FOUR_WAY }
+    var symmetry = Symmetry.OFF
+    var symmetryCenterX = 0f
+    var symmetryCenterY = 0f
+    private var strokeSymmetry = Symmetry.OFF
+    private var axisX = 0f
+    private var axisY = 0f
+
+    /** Reflections share pressure, level and taper; committed copies remain ordinary editable ink. */
+    fun symmetryCopies(stroke: StrokeData, points: List<StrokePoint> = stroke.points): List<StrokeData> {
+        val mirrors = when(strokeSymmetry) {
+            Symmetry.OFF -> emptyList()
+            Symmetry.VERTICAL -> listOf(true to false)
+            Symmetry.HORIZONTAL -> listOf(false to true)
+            Symmetry.FOUR_WAY -> listOf(true to false, false to true, true to true)
+        }
+        return mirrors.map { (flipX,flipY) ->
+            val brush = if(stroke.brush.spacingWorld > 0f) stroke.brush.copy(
+                stampFlipX=stroke.brush.stampFlipX xor flipX, stampFlipY=stroke.brush.stampFlipY xor flipY
+            ) else stroke.brush.copy(angleDeg=if(flipX != flipY) ((-stroke.brush.angleDeg % 180f)+180f)%180f else stroke.brush.angleDeg)
+            StrokeData(brush).also { copy ->
+                copy.levelId=stroke.levelId; copy.taper=stroke.taper
+                points.forEach { p -> copy.addPoint(StrokePoint(
+                    if(flipX) 2*axisX-p.x else p.x, if(flipY) 2*axisY-p.y else p.y, p.pressure01)) }
+            }
+        }.filter { it.points != points }.distinctBy { it.points }
+    }
     var currentBrush: BrushSpec = BrushSpec()
     var inProgress: StrokeData? = null
 
@@ -26,6 +53,7 @@ class DrawingViewModel(
         // P0: the stroke lives in the CURRENT level, and brush width-like
         // fields are converted to level-local units at commit time so the
         // on-screen width stays constant across zoom levels.
+        strokeSymmetry=symmetry; axisX=symmetryCenterX; axisY=symmetryCenterY
         val stroke = StrokeData(brush = currentBrush.scaledForLocalScale(camera.scale))
         stroke.levelId = camera.level.id
         stroke.addPoint(StrokePoint(worldX, worldY, pressure01))
@@ -45,7 +73,7 @@ class DrawingViewModel(
     fun endStroke(): StrokeData? {
         val stroke = inProgress
         inProgress = null
-        return if (stroke != null && document.commitStroke(stroke)) stroke else null
+        return if (stroke != null && document.commitStrokeGroup(listOf(stroke) + symmetryCopies(stroke))) stroke else null
     }
 
     // ----- P3.2 lazy brush (screen-space rope feeding the stroke commit) -----

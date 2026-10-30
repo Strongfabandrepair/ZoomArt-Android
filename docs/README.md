@@ -2,6 +2,8 @@
 
 ## Current references
 
+- [Workspace tools](WORKSPACE_TOOLS.md) — gallery/export previews, collapsible dock, symmetry and stabilization.
+
 - [User guide](USER_GUIDE.md) — offline title-screen access, all 24 brushes, pen dismissal, drawing workflows and backups.
 - [Brand guide](BRAND_GUIDE.md) — identity, palette, original vector icons and adaptive launcher.
 - [Studio theme](STUDIO_THEME.md) — ambient animation and lifecycle behavior.
@@ -18,4 +20,4 @@ Local device screenshots, recordings and artwork backups are deliberately not pu
 
 ## Current evidence
 
-The specialty-brush snapshot passed 259 local tests, debug/release APK builds and debug lint. Tablet checks covered panel dismissal and brush browsing/preview. Each current reference distinguishes these checks from earlier instrumentation runs. The guide is packaged from USER_GUIDE.md during the build, keeping the in-app offline content synchronized with this repository.
+The 30 October workspace snapshot passed **267 local tests and nine isolated Galaxy Tab S9 FE smoke tests**, debug/release APK builds and debug lint. Tablet UI checks covered gallery thumbnails, collapse/expand, drawing aids and PNG framing preview. Older counts in historical notes refer to earlier snapshots. The offline guide is packaged directly from USER_GUIDE.md and checked for exact content equality with the APK asset.

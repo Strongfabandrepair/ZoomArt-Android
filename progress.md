@@ -1,6 +1,15 @@
 # ZoomArt-Android — Progress Log
 
-## Current checkpoint — 29 October 2026
+## Current checkpoint — 30 October 2026
+
+- Studio thumbnails, name search, dates and 24-card pagination; cached previews use a detached renderer on a serial worker.
+- PNG framing previews and export-result thumbnails, including video poster frames where decoding is available.
+- Remembered collapsible dock; view-centered mirror/four-way ink symmetry with grouped Undo/Redo; Weighted and Finish smoothing alongside Rope.
+- Verification: 267 local tests, nine isolated tablet smoke tests, debug/release APK builds and debug lint passed. Tablet UI inspections covered gallery, collapse/expand, drawing aids and PNG preview.
+- Current behavior, limits and test evidence: [workspace tools](docs/WORKSPACE_TOOLS.md), [user guide](docs/USER_GUIDE.md) and [release hardening](docs/RELEASE_HARDENING.md). Previous checkpoints below are historical.
+
+
+## Previous checkpoint — 29 October 2026
 
 - App version 0.7.0 development; minimum API 26, compile/target API 36; JDK 17, Gradle 8.11.1 and AGP 8.9.2.
 - Specialty brushes: 24 built-in presets, quick labeled picker, star/leaf/chisel stamp geometry, document/personal-preset persistence and renderer-backed previews.

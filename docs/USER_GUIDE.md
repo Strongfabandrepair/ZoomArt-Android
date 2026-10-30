@@ -71,6 +71,23 @@ Projects and portable archives retain each stroke's stamp shape. Personal preset
 
 Touch the canvas with the stylus to close floating tool panels immediately. They remain closed after you lift the pen; tap their toolbar buttons to reopen them. The dock's automatic hide/restore behavior is separate and follows Settings. Standard modal menus consume the outside touch that closes them; touch the canvas again to begin drawing.
 
+## Symmetry and stabilization
+
+Open **More → Drawing aids**. **Symmetry** offers Off, Mirror left/right, Mirror top/bottom and Four-way. The axes pass through the current view center and rotate with the canvas. They recenter when you pan or zoom; they are not fixed rulers pinned to the document. Their position is held for each stroke.
+
+Symmetry applies to freehand ink, including specialty stamps. It does not duplicate erasing, shapes, smudging or selection edits. Copies appear while drawing and become ordinary editable strokes when you lift the pen. One **Undo** removes the complete group and one **Redo** restores it. Cancelling an unfinished gesture leaves no copies behind. Guides do not appear in exports. Choose Off to return to ordinary drawing.
+
+**Stabilization** offers:
+
+| Mode | How it feels |
+|---|---|
+| Off | Direct input. |
+| Rope | The brush stays within a configured trailing distance; small movements inside the radius hold it still. |
+| Weighted | Each sample blends toward the pointer for softer trailing motion. The feel depends on input sampling rate. |
+| Finish | Direct input while drawing, followed by curve smoothing when you lift the pen. |
+
+The **Stabilizer radius** control in Brush → Fine tune sets trailing distance for Rope and smoothing strength for Weighted. Larger values add more lag. Finish has no live lag; its curve smoothing and end taper are applied on completion. A zero radius disables the stabilizer effect. Ink Lab follows the selected method, including its completed-stroke taper. The method, enabled state and strength survive reopening; **Lazy** remains a quick on/off shortcut. Symmetry and stabilization choices are workspace preferences, not portable preset settings, while completed stroke geometry is saved normally.
+
 ## Color, erasing and undo
 
 Tap the color swatch for the color picker. **More → Pick** arms the eyedropper; tap the canvas with the stylus to sample a color.
@@ -116,7 +133,9 @@ ZoomArt maintains a working session using the autosave interval selected in Sett
 
 **Studio → Save copy** creates a named checkpoint of the current session. A checkpoint is a saved snapshot, not a continuously updated project tab. After editing an opened checkpoint, use Save copy again to retain another version.
 
-Tap a checkpoint to choose:
+The studio shows artwork thumbnails and modification dates. **Search projects** filters by name. Larger libraries use **Previous** and **Next** pages of up to 24 cards. Thumbnails fit the saved visible artwork on a white background and are cached locally; an empty drawing can have a white thumbnail. They represent checkpoints, not unsaved canvas changes. Recovery and trashed projects also receive previews.
+
+Tap a checkpoint card to choose:
 
 | Action | What it does |
 |---|---|
@@ -138,6 +157,8 @@ Archive operations are not resumable background jobs. Keep the operation open un
 
 **More → Video** creates an MP4 zoom tour using bookmark views. Supported destination and media-publication behavior depend on the Android version. Follow the app's export result message and use Android's Files/Gallery apps to locate completed output. For editable transfer, use a portable project archive instead.
 
+PNG export now opens an **Export preview** after you choose Current view or Entire drawing. Check the framing, then tap **Save image**, or Cancel without creating an export. The preview is smaller than the saved image and omits editing guides. Completed PNG exports show a thumbnail alongside Share; completed video exports show a poster frame when Android can decode one. Portable archives retain project content and regenerate their studio thumbnails on import; they do not carry the local preview cache.
+
 ## Settings, motion and troubleshooting
 
 Settings includes default brush, automatic panel hiding, finger drawing, autosave interval and dock orientation. Android's animation setting and Battery Saver can stop ambient motion. Hidden or unfocused screens also stop animating. Disabling ambient motion does not affect the document.
@@ -146,7 +167,7 @@ Settings includes default brush, automatic panel hiding, finger drawing, autosav
 |---|---|
 | My finger moves the view instead of drawing | Enable finger drawing in Settings, or use a stylus. |
 | Ink does not appear | Active layer visibility/lock, brush opacity, active tool and current zoom. |
-| A control is missing | Scroll the dock, open More, or enter Select for selection commands. |
+| A control is missing | Tap Show tools if collapsed, scroll the dock, open More, or enter Select for selection commands. |
 | The brush feels delayed | Reduce the stabilizer radius or disable it. |
 | A saved drawing seems unchanged | Checkpoints are snapshots; create a new Save copy after editing. |
 | An image looks pixelated | Imported images have finite resolution. |

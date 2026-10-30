@@ -25,4 +25,8 @@ A short unrecorded title sample before particle batching measured 22 ms median /
 
 Pen contact closes floating tool panels immediately and cancels their animations. Explicitly dismissed panels ignore automatic hide/restore calls until reopened. Dock auto-hide remains independent. The offline User Guide uses a static background for reading.
 
-The latest specialty-brush snapshot passed 259 local tests, debug/release APK assembly and debug lint. Tablet checks confirmed panel dismissal after the idle delay, the brush picker and Star chain preview. Earlier theme instrumentation results above were not rerun in this snapshot. See [release hardening](RELEASE_HARDENING.md) for unresolved performance and accessibility work.
+The earlier specialty-brush snapshot passed 259 local tests, debug/release APK assembly and debug lint. Tablet checks confirmed panel dismissal after the idle delay, the brush picker and Star chain preview. Earlier theme instrumentation results above were not rerun in this snapshot. See [release hardening](RELEASE_HARDENING.md) for unresolved performance and accessibility work.
+
+## Workspace update — 30 October 2026
+
+The dock now supports a remembered collapsed state, with Hide tools / Show tools distinct from temporary auto-hide. Gallery cards use pale surfaces with real artwork thumbnails and readable names/dates; export dialogs use real framing previews, not decorative backgrounds. Symmetry guides appear only on the editing canvas. The latest verification is 267 local tests and nine isolated tablet smoke tests, debug/release APK builds and debug lint. See [workspace tools](WORKSPACE_TOOLS.md) for details; earlier counts above remain historical.

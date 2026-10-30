@@ -1,6 +1,16 @@
-# Release hardening — 29 October 2026
+# Release hardening — updated 30 October 2026
 
-## Latest verification — specialty brush snapshot
+## Latest verification — workspace preview and drawing-aid snapshot
+
+- **267 local tests and nine isolated Galaxy Tab S9 FE / Android 16 smoke tests passed**, with debug/release APK assembly and debug lint.
+- New regression coverage includes thumbnail cache refresh, worker-based rendering, symmetry grouping/Undo/Redo/cancellation/locks, axis overlap, stabilization modes and toolbar recreation.
+- Tablet UI checks covered studio cards, toolbar collapse/expand, Drawing aids navigation and PNG framing preview. Private captures remain excluded from Git.
+- Gallery thumbnails, name search, dates and bounded pagination are implemented. PNG has a framing preview and completed-export thumbnail; video results attempt a decoded poster frame.
+- View-centered freehand symmetry and three stabilization modes are implemented, with persistent workspace preferences. Guides are excluded from exported content.
+- Full physical-phone/split-screen/accessibility coverage, time-normalized weighted filtering, radial/document-anchored symmetry and new mixed-workload profiling remain outside this pass. Release bundle/release lint and frame profiling were not rerun. See [workspace tools](WORKSPACE_TOOLS.md).
+
+
+## Earlier verification — specialty brush snapshot
 
 - **259 local tests passed**, including distinct stamp silhouettes, save/reopen rendering, calligraphy caps, stabilizer geometry and permanent panel dismissal across delayed restore.
 - Debug and optimized release APK assembly and debug lint passed. This snapshot did not rerun the full device instrumentation suite, release bundle or release lint; counts in the earlier sections below remain historical.
@@ -46,7 +56,7 @@ The original 8 MiB outline cache thrashed when the working set exceeded it. Cach
 ## Remaining release work
 
 1. Background snapshot capture still copies geometry on the UI thread. The executor is process-scoped, not a durable job: process termination before an atomic commit can lose the latest queued revision. Explicit project switching/startup still uses blocking durability barriers. Add process-kill/fault-injection coverage and an incremental journal or immutable document model before claiming crash-proof saving.
-2. Archive operations are background Activity work, not resumable jobs. Interrupted exports can leave an incomplete destination file. Test multiple document providers, low storage, cancellation and process death; add progress/retry UI, thumbnails and orphaned-asset collection.
+2. Archive operations are background Activity work, not resumable jobs. Interrupted exports can leave an incomplete destination file. Test multiple document providers, low storage, cancellation and process death; add progress/retry UI and orphaned-asset collection. Local gallery thumbnails are now implemented.
 3. Deep validation is bounded and regression-tested, not exhaustively fuzzed. Keep resource limits consistent with authoring limits so extremely large documents cannot be created but then rejected on reopen. Profile extreme bookmark-flight costs and extend precision assertions beyond finite outputs.
 4. Dense drawing performance remains a release blocker. Extend workloads to real mixed-brush documents, exports and extended S Pen sessions.
 5. Localization is partial: older controls/messages remain hardcoded. Complete extraction and reviewed translations. Conduct TalkBack, Switch Access, large-font and contrast audits; resource-backed labels alone do not establish accessibility compliance.
